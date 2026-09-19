@@ -131,9 +131,9 @@ Keep plugin source, development loading, and stable installation separate:
 
 - **Source checkout:** edit and test novaSpace under `DEV/labs/plugins`. Do not
   copy installed package contents into the checkout or config directory.
-- **Development host:** use project-local configuration to disable the stable
-  `novaspace.*` IDs and then load the checkout path. This confines live source
-  changes to the dev workspace.
+- **Development host:** disable the exact stable IDs, then load a tiny wrapper
+  with `novaspace.dev.*` IDs that imports the checkout. This avoids package
+  deduplication while keeping mutable source confined to the dev workspace.
 - **Stable installation:** configure an exact npm version or complete Git commit
   in the global profile. OpenCode owns its managed package cache; do not edit it.
 - **Config plugins:** reserve `~/.config/opencode/plugins/` for small personal
@@ -145,9 +145,10 @@ Example development-host override (the relative path is resolved from this
 ```jsonc
 {
   "plugins": [
-    "-novaspace.*",
+    "-novaspace.server",
+    "-novaspace.tui",
     {
-      "package": "../../../plugins/novaspace",
+      "package": "./plugins/novaspace-dev",
       "options": {}
     }
   ]
