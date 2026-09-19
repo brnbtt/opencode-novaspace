@@ -30,3 +30,13 @@ test("uses OpenCode V2 resolved theme tokens", async () => {
   expect(shipped).not.toMatch(/\.theme\.(?:text\.(?:default|subdued)|background\.default)/)
   expect(shipped).not.toMatch(/\.theme\.(?:text\.)?feedback\.(?:info|warning|success|error)\.default/)
 })
+
+test("uses the host renderer for installed-package dimensions", async () => {
+  const root = new URL("../src", import.meta.url).pathname
+  const consumers = ["carousel.tsx", "drag-overlay.tsx", "cards/setup/modal.tsx", "cards/setup/sync-onboarding.tsx"]
+  for (const file of consumers) {
+    const source = await Bun.file(`${root}/${file}`).text()
+    expect(source).toContain("useHostDimensions")
+    expect(source).not.toContain('from "@opentui/solid"')
+  }
+})

@@ -1,9 +1,8 @@
 /** @jsxImportSource @opentui/solid */
 import { MouseButton } from "@opentui/core"
-import { useTerminalDimensions } from "@opentui/solid"
 import { For, Show } from "solid-js"
 import type { TuiContext } from "../../types"
-import { cardSurface, nativeScrollbar } from "../../ui"
+import { cardSurface, nativeScrollbar, useHostDimensions } from "../../ui"
 import { displaySetupPath, SetupActionLink } from "./action"
 import { groupSetupSections, setupSections, type SetupInventory, type SetupTarget } from "./inventory"
 import type { StandardizationPreflight } from "./preflight"
@@ -115,7 +114,7 @@ export function SetupModal(props: {
   openTarget?: OpenSetupTarget
   loadPreflight?: (ctx: TuiContext) => Promise<StandardizationPreflight>
 }) {
-  const dimensions = useTerminalDimensions()
+  const dimensions = useHostDimensions(props.ctx)
   const open = (target: SetupTarget) => {
     void (props.openTarget ?? openSetupTarget)(target)
       .then(() => props.ctx.ui.toast.show({

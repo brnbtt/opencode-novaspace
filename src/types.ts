@@ -62,7 +62,7 @@ type LocationCollection<T> = {
 }
 
 export type TuiContext = {
-  renderer?: Pick<CliRenderer, "clearSelection">
+  renderer?: Pick<CliRenderer, "clearSelection" | "width" | "height" | "on" | "off">
   keymap?: {
     layer(input: () => { mode?: string; priority?: number; commands: { bind: string; enabled?: () => boolean; run(): void | false }[] }): void
   }

@@ -1,7 +1,8 @@
 /** @jsxImportSource @opentui/solid */
 import { MouseButton, parseColor, RGBA, type BoxRenderable, type ScrollBoxOptions } from "@opentui/core"
-import { createEffect, createSignal, onCleanup, untrack, Show, type JSX } from "solid-js"
-import type { Theme } from "./types"
+import { useTerminalDimensions } from "@opentui/solid"
+import { createEffect, createSignal, onCleanup, onMount, untrack, Show, type JSX } from "solid-js"
+import type { Theme, TuiContext } from "./types"
 import type { CardDragBinding } from "./drag"
 
 function mix(from: RGBA, to: RGBA, amount: number) {
@@ -27,6 +28,17 @@ export function nativeScrollbar(theme: Theme): ScrollBoxOptions["verticalScrollb
       foregroundColor: theme.border?.base ?? theme.scrollbar?.base ?? theme.text.muted,
     },
   }
+}
+
+/** Use the host renderer directly so installed packages do not depend on a second OpenTUI context. */
+export function useHostDimensions(ctx: TuiContext) {
+  if (!ctx.renderer) return useTerminalDimensions()
+  const renderer = ctx.renderer
+  const [dimensions, setDimensions] = createSignal({ width: renderer.width, height: renderer.height })
+  const resize = (width: number, height: number) => setDimensions({ width, height })
+  onMount(() => renderer.on("resize", resize))
+  onCleanup(() => renderer.off("resize", resize))
+  return dimensions
 }
 
 export function Divider(props: { theme: Theme; strong?: boolean }) {

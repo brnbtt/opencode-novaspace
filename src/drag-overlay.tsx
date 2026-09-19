@@ -1,10 +1,9 @@
 /** @jsxImportSource @opentui/solid */
 import { Show } from "solid-js"
-import { useTerminalDimensions } from "@opentui/solid"
 import type { SidebarDrag } from "./drag"
 import type { TuiContext } from "./types"
 import { cards } from "./cards/registry"
-import { cardSurface } from "./ui"
+import { cardSurface, useHostDimensions } from "./ui"
 import { FloatingCard } from "./card-preview"
 
 export function DragOverlay(props: { drag: SidebarDrag; ctx: TuiContext }) {
@@ -14,7 +13,7 @@ export function DragOverlay(props: { drag: SidebarDrag; ctx: TuiContext }) {
     priority: 100,
     commands: [{ bind: "escape", enabled: () => !!props.drag.gesture(), run: () => { if (!props.drag.gesture()) return false; props.drag.cancel() } }],
   }))
-  const dimensions = useTerminalDimensions()
+  const dimensions = useHostDimensions(props.ctx)
   const state = props.drag.gesture
   const target = () => state()?.target
   const previewSize = () => ({

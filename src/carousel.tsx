@@ -1,11 +1,10 @@
 /** @jsxImportSource @opentui/solid */
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
-import { useTerminalDimensions } from "@opentui/solid"
 import { MouseButton, type BoxRenderable, type ScrollBoxRenderable } from "@opentui/core"
 import type { CardID } from "./config"
 import type { LayoutController } from "./layout"
 import type { TuiContext } from "./types"
-import { nativeScrollbar } from "./ui"
+import { nativeScrollbar, useHostDimensions } from "./ui"
 import type { SidebarDrag } from "./drag"
 
 type DragRegion = { manager: SidebarDrag; sessionID: string }
@@ -34,7 +33,7 @@ function PageDot(props: { id: CardID; active: boolean; ctx: TuiContext; drag?: D
 }
 
 export function CardCarousel(props: { ctx: TuiContext; controller: LayoutController; drag?: DragRegion; render(id: CardID): JSX.Element }) {
-  const dimensions = useTerminalDimensions()
+  const dimensions = useHostDimensions(props.ctx)
   const [height, setHeight] = createSignal(7)
   let content: BoxRenderable | undefined
   let scroll: ScrollBoxRenderable | undefined

@@ -1,9 +1,8 @@
 /** @jsxImportSource @opentui/solid */
 import { MouseButton } from "@opentui/core"
-import { useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createSignal, onCleanup, Show } from "solid-js"
 import type { TuiContext } from "../../types"
-import { cardSurface, nativeScrollbar } from "../../ui"
+import { cardSurface, nativeScrollbar, useHostDimensions } from "../../ui"
 import { SetupActionLink } from "./action"
 import { loadStandardizationPreflight, preflightStatus, type StandardizationPreflight } from "./preflight"
 import { PreflightView } from "./preflight-view"
@@ -36,7 +35,7 @@ export function SyncOnboardingModal(props: {
   loadPreflight?: (ctx: TuiContext) => Promise<StandardizationPreflight>
   onBack(): void
 }) {
-  const dimensions = useTerminalDimensions()
+  const dimensions = useHostDimensions(props.ctx)
   const [reviewing, setReviewing] = createSignal(false)
   const [preflight, setPreflight] = createSignal<StandardizationPreflight>()
   const [loading, setLoading] = createSignal(true)
