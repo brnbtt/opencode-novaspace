@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "novaSpace: a configurable card-based OpenCode sidebar and profile manager",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": "./index.ts",

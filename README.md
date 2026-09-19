@@ -251,3 +251,7 @@ bun install
 bun test
 bun run typecheck
 ```
+
+## License
+
+MIT © Bruno Bett. See [LICENSE](LICENSE).
