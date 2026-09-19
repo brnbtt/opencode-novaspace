@@ -15,7 +15,7 @@ export async function loadGitHubProfile(signal?: AbortSignal): Promise<ProfileSt
     signal,
   })
   let timedOut = false
-  const timer = setTimeout(() => { timedOut = true; process.kill() }, 10_000)
+  const timer = setTimeout(() => { timedOut = true; process.kill() }, 5_000)
   try {
     const [stdout, code] = await Promise.all([new Response(process.stdout).text(), process.exited])
     const login = stdout.trim()

@@ -31,6 +31,7 @@ export function SetupCard(props: CardProps & {
 }) {
   const [inventory, setInventory] = createSignal<SetupInventory>(emptyInventory())
   const [inventoryLoading, setInventoryLoading] = createSignal(true)
+  const [inventoryFailed, setInventoryFailed] = createSignal(false)
   const [profile, setProfile] = createSignal<ProfileState>({ connection: "signed-out", sync: "local" })
   const [profileLoading, setProfileLoading] = createSignal(true)
   const [revealed, setRevealed] = createSignal(0)
@@ -38,7 +39,14 @@ export function SetupCard(props: CardProps & {
 
   const refreshInventory = async () => {
     setInventoryLoading(true)
-    try { setInventory(await (props.loadInventory ?? loadSetupInventory)(props.ctx)) } finally { setInventoryLoading(false) }
+    setInventoryFailed(false)
+    try {
+      setInventory(await (props.loadInventory ?? loadSetupInventory)(props.ctx))
+    } catch {
+      setInventoryFailed(true)
+    } finally {
+      setInventoryLoading(false)
+    }
   }
   createEffect(() => {
     props.ctx.data.location.default()
@@ -124,6 +132,8 @@ export function SetupCard(props: CardProps & {
       <box flexDirection="column">
         {inventoryLoading() && inventory().skills.length === 0
           ? <text selectable={false} fg={props.ctx.theme.text.subdued}>Inspecting customization layers…</text>
+          : inventoryFailed() && inventory().skills.length === 0
+            ? <text selectable={false} fg={props.ctx.theme.text.feedback.warning.default}>Setup inventory unavailable</text>
           : rows().map((row, index) => <Layer row={row} index={index} revealed={revealed()} ctx={props.ctx} />)}
       </box>
       <Divider theme={props.ctx.theme} strong />

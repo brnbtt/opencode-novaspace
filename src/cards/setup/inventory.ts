@@ -51,6 +51,18 @@ export type SetupSectionGroup = {
 
 const builtInAgents = new Set(["build", "general", "explore", "compaction", "title", "summary", "plan"])
 
+async function within<T>(promise: Promise<T>, milliseconds: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} timed out`)), milliseconds) }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 function status(value: { status?: { status?: string } | string }) {
   return typeof value.status === "string" ? value.status : value.status?.status ?? "unknown"
 }
@@ -66,7 +78,9 @@ async function syncCollections(ctx: TuiContext, location: Location) {
     ctx.data.location.agent,
     ctx.data.location.mcp?.server,
   ]
-  await Promise.allSettled(collections.flatMap((collection) => collection?.sync ? [collection.sync(location)] : []))
+  await Promise.allSettled(collections.flatMap((collection) => collection?.sync
+    ? [within(collection.sync(location), 5_000, "Customization inventory")]
+    : []))
 }
 
 async function firstExisting(paths: (string | undefined)[], kind: SetupTarget["kind"]): Promise<SetupTarget | undefined> {
@@ -134,9 +148,11 @@ function pluginTarget(path: string | undefined, settings: SetupTarget | undefine
 export async function loadSetupInventory(ctx: TuiContext, options: { home?: string } = {}): Promise<SetupInventory> {
   const location = ctx.data.location.default()
   await syncCollections(ctx, location)
+  const pluginRequest = ctx.client.plugin?.list({ location })
+  const configRequest = ctx.client.config?.get({ location })
   const [pluginResult, configResult] = await Promise.allSettled([
-    ctx.client.plugin?.list({ location }),
-    ctx.client.config?.get({ location }),
+    pluginRequest ? within(pluginRequest, 5_000, "Plugin inventory") : Promise.resolve(undefined),
+    configRequest ? within(configRequest, 5_000, "Configuration inventory") : Promise.resolve(undefined),
   ])
   const plugins = pluginResult.status === "fulfilled" ? pluginResult.value?.data ?? [] : []
   const configs = configResult.status === "fulfilled" ? configResult.value?.data ?? [] : []
