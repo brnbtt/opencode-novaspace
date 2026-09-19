@@ -1,3 +1,4 @@
+/** @jsxImportSource @opentui/solid */
 import { createMemo } from "solid-js"
 import { Card, CardTitle, cardHeader, metricRow } from "../../ui"
 import type { SessionMessage } from "../../types"

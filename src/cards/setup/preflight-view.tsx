@@ -1,3 +1,4 @@
+/** @jsxImportSource @opentui/solid */
 import { For, Show } from "solid-js"
 import type { TuiContext } from "../../types"
 import { cardSurface } from "../../ui"

@@ -26,6 +26,10 @@ live in their own folders under `src/cards/` and are wired in
 `opencode.json(c)` options list them. See "Project structure" for how to add
 your own and "Publish a framework-only build" for how to drop these.
 
+The optional Memory card can read an existing OptMem installation. novaSpace
+does not register memory tools; the independent `opencode-optmem` plugin owns
+that capability.
+
 Every card uses the same theme-derived subtle surface and hover transition.
 
 The setup modal has a compact **Set up sync** entry, then mirrors the five layers
@@ -145,7 +149,7 @@ Example development-host override (the relative path is resolved from this
 ```jsonc
 {
   "plugins": [
-    "-novaspace.server",
+    "-novaspace",
     "-novaspace.tui",
     {
       "package": "./plugins/novaspace-dev",
@@ -159,6 +163,18 @@ Once published, the global profile should use a pinned stable package such as
 `opencode-novaspace@0.1.0`; active feature work should never be the globally
 installed copy.
 
+## Releases
+
+Git commit installation is the stable channel until the first npm release.
+Before publishing `opencode-novaspace`:
+
+1. Verify CI, typecheck, tests, and `bun pm pack --dry-run`.
+2. Configure npm 2FA and GitHub trusted publishing for this repository.
+3. Remove `private: true`, then tag the matching `vX.Y.Z` commit.
+4. Publish with provenance and create release notes from the same tag.
+5. Update the global OpenCode profile from the prior full Git commit to the
+   exact npm version only after installation verification.
+
 ## Project structure
 
 Two entry points and a two-tier layout: the top-level `src/` files are the
@@ -169,7 +185,8 @@ Entry points
 
 - `index.ts` / `tui.tsx` (repo root) — thin re-export facades named by the
   `package.json` exports.
-- `src/index.ts` — server plugin; registers the memory tools.
+- `src/index.ts` — minimal package entrypoint used to load the TUI extension;
+  novaSpace registers no server tools.
 - `src/tui.tsx` — TUI plugin; mounts the sidebar, footer, and drag-overlay
   slots and composes cards through `RenderCard`.
 

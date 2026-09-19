@@ -1,3 +1,4 @@
+/** @jsxImportSource @opentui/solid */
 import type { CardID, SidebarOptions } from "../config"
 import type { CardDefinition, PlacedCard } from "../card"
 // Generic cards that ship with the plugin framework.

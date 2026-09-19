@@ -1,3 +1,4 @@
+/** @jsxImportSource @opentui/solid */
 import { createSignal } from "solid-js"
 // Keep reactive helpers in .tsx: OpenCode 2.0.7 rewrites their Solid imports to
 // the host runtime only through its JSX loader. Plain .ts loads a second runtime.

@@ -45,7 +45,7 @@ test("opens the compact setup hub from the main card", async () => {
   const inventory = emptyInventory()
   inventory.skills = Array.from({ length: 10 }, (_, index) => ({ name: `skill-${index}`, target: { path: `/Users/example/.agents/skills/skill-${index}/SKILL.md`, kind: "file" } }))
   inventory.instructions = [{ name: "AGENTS.md", target: { path: "/Users/example/.config/opencode/AGENTS.md", kind: "file" } }]
-  inventory.plugins = [{ name: "novaspace.server", state: "success", target: { path: "/Users/example/.config/opencode/opencode.jsonc", kind: "file" } }]
+  inventory.plugins = [{ name: "novaspace", state: "success", target: { path: "/Users/example/.config/opencode/opencode.jsonc", kind: "file" } }]
   inventory.mcp = ["gateway", "playwright"].map((name) => ({ name, state: "success" as const, target: { path: "/Users/example/.config/opencode/opencode.jsonc", kind: "file" as const } }))
   inventory.agents = Array.from({ length: 4 }, (_, index) => ({ name: `agent-${index}`, target: { path: "/Users/example/.config/opencode/opencode.jsonc", kind: "file" as const } }))
   inventory.targets = {
@@ -191,7 +191,7 @@ test("opens the compact setup hub from the main card", async () => {
     expect(bottom).toContain("Subagents")
     expect(bottom).toContain("OpenCode settings")
     expect(bottom).toContain("Configured items")
-    expect(bottom).toContain("Plugin · novaspace.server")
+    expect(bottom).toContain("Plugin · novaspace")
     expect(bottom).toContain("MCP · gateway")
     expect(bottom).not.toContain("opencode.jsonc")
     expect(detail.renderer.root.findDescendantById("setup-plugins-mcp-agents-section")).toBeDefined()

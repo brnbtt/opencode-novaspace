@@ -1,3 +1,4 @@
+/** @jsxImportSource @opentui/solid */
 import { MouseButton } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { For, Show } from "solid-js"

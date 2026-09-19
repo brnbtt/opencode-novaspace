@@ -1,3 +1,4 @@
+/** @jsxImportSource @opentui/solid */
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { Card, cardHeader, Divider, metricRow } from "../../ui"
 import { defineCard, type CardProps } from "../../card"

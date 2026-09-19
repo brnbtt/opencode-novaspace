@@ -1,3 +1,4 @@
+/** @jsxImportSource @opentui/solid */
 import { Show } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
 import type { SidebarDrag } from "./drag"

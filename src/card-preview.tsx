@@ -1,3 +1,4 @@
+/** @jsxImportSource @opentui/solid */
 import { For, Show } from "solid-js"
 import { RGBA, StyledText, type BoxOptions, type BoxRenderable, type Renderable, type TextOptions, type TextRenderable } from "@opentui/core"
 import type { Theme } from "./types"

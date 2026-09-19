@@ -4,15 +4,17 @@
   "workspaces": {
     "": {
       "name": "opencode-novaspace",
-      "dependencies": {
-        "@opentui/core": "0.5.8",
-        "@opentui/keymap": "0.5.8",
-        "@opentui/solid": "0.5.8",
-        "solid-js": "1.9.15",
-      },
       "devDependencies": {
+        "@opentui/core": "0.5.8",
+        "@opentui/solid": "0.5.8",
         "@types/bun": "^1.3.0",
+        "solid-js": "1.9.15",
         "typescript": "^5.8.2",
+      },
+      "peerDependencies": {
+        "@opentui/core": ">=0.5.8",
+        "@opentui/solid": ">=0.5.8",
+        "solid-js": ">=1.9.0",
       },
     },
   },
@@ -100,8 +102,6 @@
     "@opentui/core-win32-arm64": ["@opentui/core-win32-arm64@0.5.8", "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@opentui/core-win32-arm64/-/core-win32-arm64-0.5.8.tgz", { "os": "win32", "cpu": "arm64" }, "sha1-YnOmheYl+7vNsDY8ooL6EGq2WrI="],
 
     "@opentui/core-win32-x64": ["@opentui/core-win32-x64@0.5.8", "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@opentui/core-win32-x64/-/core-win32-x64-0.5.8.tgz", { "os": "win32", "cpu": "x64" }, "sha1-GvSNEAb3kvI4V5UMu+9bGb9/Joo="],
-
-    "@opentui/keymap": ["@opentui/keymap@0.5.8", "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@opentui/keymap/-/keymap-0.5.8.tgz", { "dependencies": { "@opentui/core": "0.5.8" }, "peerDependencies": { "@opentui/react": "0.5.8", "@opentui/solid": "0.5.8", "react": ">=19.2.0", "solid-js": "1.9.12" }, "optionalPeers": ["@opentui/react", "@opentui/solid", "react", "solid-js"] }, "sha1-XjZUTGNMWry6YK/fHAqXoQrT7DY="],
 
     "@opentui/solid": ["@opentui/solid@0.5.8", "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@opentui/solid/-/solid-0.5.8.tgz", { "dependencies": { "@babel/core": "7.28.0", "@babel/preset-typescript": "7.27.1", "@opentui/core": "0.5.8", "babel-plugin-module-resolver": "5.0.2", "babel-preset-solid": "1.9.12", "entities": "7.0.1", "s-js": "^0.4.9" }, "peerDependencies": { "solid-js": "1.9.12" } }, "sha1-+rt0gOksfJ7YJpCZCtLGv7RlvMg="],
 

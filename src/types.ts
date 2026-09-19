@@ -147,20 +147,3 @@ export type TuiContext = {
     }
   }
 }
-
-export type ToolDefinition = {
-  name: string
-  description: string
-  input: Record<string, unknown>
-  options?: { namespace?: string; codemode?: boolean }
-  execute(input: unknown, tool: { progress(input: { status: string }): Promise<void> }): Promise<{ content: string }>
-}
-
-export type ServerContext = {
-  tool: {
-    transform(callback: (editor: {
-      namespace(input: { name: string; description: string }): void
-      add(tool: ToolDefinition): void
-    }) => void): Promise<{ dispose(): Promise<void> }>
-  }
-}

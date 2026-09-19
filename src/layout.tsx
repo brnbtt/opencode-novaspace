@@ -1,3 +1,4 @@
+/** @jsxImportSource @opentui/solid */
 import { createMemo } from "solid-js"
 // .tsx selects OpenCode 2.0.7's host-Solid import rewrite for this reactive helper.
 import { createStore, produce } from "solid-js/store"

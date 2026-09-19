@@ -1,3 +1,4 @@
+/** @jsxImportSource @opentui/solid */
 import { createMemo, createSignal, onCleanup } from "solid-js"
 import { createUsageStore, REFRESH_MS } from "./store"
 import { fetchQuota, progress, resetLabel, sessionCredits } from "./usage"

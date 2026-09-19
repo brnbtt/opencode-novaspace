@@ -1,3 +1,4 @@
+/** @jsxImportSource @opentui/solid */
 import { MouseButton } from "@opentui/core"
 import { createSignal } from "solid-js"
 import type { TuiContext } from "../../types"

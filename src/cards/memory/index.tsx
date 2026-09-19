@@ -1,3 +1,4 @@
+/** @jsxImportSource @opentui/solid */
 import { basename } from "node:path"
 import { createEffect, createMemo, createSignal, For, onCleanup } from "solid-js"
 import { compactBytes } from "./format"

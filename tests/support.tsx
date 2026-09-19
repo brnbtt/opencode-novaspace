@@ -36,7 +36,7 @@ export function context(dialogRender?: (render: () => JSX.Element) => void): Tui
       },
       plugin: { async list() { return { data: [
         { id: "opencode.core", source: { type: "builtin" } },
-        { id: "novaspace.server", source: { type: "local", path: "/plugins/novaspace" }, features: { server: true, tui: true }, state: { status: "active" } },
+        { id: "novaspace", source: { type: "local", path: "/plugins/novaspace" }, features: { server: true, tui: true }, state: { status: "active" } },
       ] } } },
       config: { async get() { return { data: [{
         type: "document",

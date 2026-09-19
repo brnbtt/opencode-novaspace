@@ -1,3 +1,4 @@
+/** @jsxImportSource @opentui/solid */
 import { createEffect, For, onCleanup, onMount, Show } from "solid-js"
 import type { CardID } from "./config"
 import { cards } from "./cards/registry"

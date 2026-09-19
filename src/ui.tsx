@@ -1,3 +1,4 @@
+/** @jsxImportSource @opentui/solid */
 import { MouseButton, parseColor, RGBA, type BoxRenderable, type ScrollBoxOptions } from "@opentui/core"
 import { createEffect, createSignal, onCleanup, untrack, Show, type JSX } from "solid-js"
 import type { Theme } from "./types"
