@@ -20,10 +20,10 @@ function SyncStep(props: {
   return (
     <box flexDirection="column" paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1} backgroundColor={cardSurface(props.ctx.theme, props.active ? 0.18 : 0.1)}>
       <box flexDirection="row" justifyContent="space-between" height={1}>
-        <text fg={props.ctx.theme.text.default}><b>{`${props.number}  ${props.title}`}</b></text>
-        <text fg={props.status === "Ready" ? props.ctx.theme.text.feedback.success.default : props.active ? props.ctx.theme.text.feedback.warning.default : props.ctx.theme.text.subdued}>{props.status}</text>
+        <text fg={props.ctx.theme.text.base}><b>{`${props.number}  ${props.title}`}</b></text>
+        <text fg={props.status === "Ready" ? props.ctx.theme.text.feedback.success.base : props.active ? props.ctx.theme.text.feedback.warning.base : props.ctx.theme.text.muted}>{props.status}</text>
       </box>
-      <text fg={props.ctx.theme.text.subdued} wrapMode="word">{props.description}</text>
+      <text fg={props.ctx.theme.text.muted} wrapMode="word">{props.description}</text>
       <Show when={props.action}>{(action) => (
         <SetupActionLink id={action().id} ctx={props.ctx} label={action().label} onPress={action().run} />
       )}</Show>
@@ -61,13 +61,13 @@ export function SyncOnboardingModal(props: {
       paddingRight={2}
       paddingTop={1}
       paddingBottom={1}
-      backgroundColor={props.ctx.theme.background.default}
+      backgroundColor={props.ctx.theme.background.base}
     >
       <box flexDirection="row" justifyContent="space-between" flexShrink={0} height={1}>
-        <text fg={props.ctx.theme.text.default}><b>Set up sync</b></text>
-        <text fg={props.ctx.theme.text.subdued}>{props.ctx.app?.version ? `v${props.ctx.app.version}` : ""}</text>
+        <text fg={props.ctx.theme.text.base}><b>Set up sync</b></text>
+        <text fg={props.ctx.theme.text.muted}>{props.ctx.app?.version ? `v${props.ctx.app.version}` : ""}</text>
       </box>
-      <text flexShrink={0} fg={props.ctx.theme.text.subdued}>Back up your global OpenCode profile to a private GitHub repository.</text>
+      <text flexShrink={0} fg={props.ctx.theme.text.muted}>Back up your global OpenCode profile to a private GitHub repository.</text>
 
       <scrollbox
         id="setup-sync-onboarding-scroll"
@@ -100,7 +100,7 @@ export function SyncOnboardingModal(props: {
       </scrollbox>
 
       <box flexDirection="row" justifyContent="space-between" flexShrink={0} height={1} marginTop={1}>
-        <text fg={props.ctx.theme.text.subdued}>Esc to close</text>
+        <text fg={props.ctx.theme.text.muted}>Esc to close</text>
         <box flexDirection="row" gap={1}>
           <SetupActionLink id="setup-sync-setup-back" ctx={props.ctx} label="← Setup" onPress={props.onBack} />
           <box

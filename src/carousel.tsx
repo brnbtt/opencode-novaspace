@@ -26,7 +26,7 @@ function PageDot(props: { id: CardID; active: boolean; ctx: TuiContext; drag?: D
       }}
     >
       <text
-        selectable={false} fg={props.active || hovered() ? props.ctx.theme.text.default : props.ctx.theme.text.subdued}
+        selectable={false} fg={props.active || hovered() ? props.ctx.theme.text.base : props.ctx.theme.text.muted}
         opacity={props.active || hovered() ? 1 : 0.55}
       >{props.active ? "━━" : "•"}</text>
     </box>

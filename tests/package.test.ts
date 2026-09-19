@@ -20,3 +20,13 @@ test("pins the OpenTUI JSX runtime in every shipped TSX module", async () => {
     expect(firstLine).toBe("/** @jsxImportSource @opentui/solid */")
   }
 })
+
+test("uses OpenCode V2 resolved theme tokens", async () => {
+  const root = new URL("../src", import.meta.url).pathname
+  const files: string[] = []
+  for await (const file of new Bun.Glob("**/*.{ts,tsx}").scan({ cwd: root })) files.push(file)
+  const source = await Promise.all(files.map((file) => Bun.file(`${root}/${file}`).text()))
+  const shipped = source.join("\n")
+  expect(shipped).not.toMatch(/\.theme\.(?:text\.(?:default|subdued)|background\.default)/)
+  expect(shipped).not.toMatch(/\.theme\.(?:text\.)?feedback\.(?:info|warning|success|error)\.default/)
+})

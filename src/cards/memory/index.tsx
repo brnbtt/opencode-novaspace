@@ -74,35 +74,35 @@ export function MemoryCard(props: CardProps & { store?: MemoryStore; loadContext
       {status() ? (
         <box flexDirection="column">
           <box {...metricRow}>
-            <text fg={props.ctx.theme.text.subdued}>{`${active()} memories`}</text>
+            <text fg={props.ctx.theme.text.muted}>{`${active()} memories`}</text>
             <box flexDirection="row" gap={1}>
-              <text fg={ready() ? props.ctx.theme.text.feedback.success.default : props.ctx.theme.text.feedback.warning.default}>•</text>
-              <text fg={props.ctx.theme.text.default}>{ready() ? "Ready" : "Maintenance needed"}</text>
+              <text fg={ready() ? props.ctx.theme.text.feedback.success.base : props.ctx.theme.text.feedback.warning.base}>•</text>
+              <text fg={props.ctx.theme.text.base}>{ready() ? "Ready" : "Maintenance needed"}</text>
             </box>
           </box>
           <box {...metricRow}>
-            <text fg={props.ctx.theme.text.subdued}>Startup view</text>
-            <text fg={props.ctx.theme.text.default}>{compactBytes(status()!.wake.bytes)}</text>
+            <text fg={props.ctx.theme.text.muted}>Startup view</text>
+            <text fg={props.ctx.theme.text.base}>{compactBytes(status()!.wake.bytes)}</text>
           </box>
           {expanded() ? (
             <box flexDirection="column" gap={1} marginTop={1}>
               <box {...cardHeader}>
-                <text fg={props.ctx.theme.text.default}><b>Remembered here</b></text>
-                <text fg={props.ctx.theme.text.subdued}>{scope()}</text>
+                <text fg={props.ctx.theme.text.base}><b>Remembered here</b></text>
+                <text fg={props.ctx.theme.text.muted}>{scope()}</text>
               </box>
-              {contextLoading() && !context() ? <text fg={props.ctx.theme.text.subdued}>Loading context…</text> : (
+              {contextLoading() && !context() ? <text fg={props.ctx.theme.text.muted}>Loading context…</text> : (
                 <For each={visible()}>{(entry) => (
                   <box flexDirection="column">
-                    <text fg={props.ctx.theme.text.feedback.info.default}><b>{`${entry.scope?.toLowerCase() === "global" ? "GLOBAL" : "THIS PROJECT"} · ${shortDate(entry.date)} · #${entry.id}`}</b></text>
-                    <text fg={props.ctx.theme.text.default} wrapMode="word">{entryText(entry)}</text>
+                    <text fg={props.ctx.theme.text.feedback.info.base}><b>{`${entry.scope?.toLowerCase() === "global" ? "GLOBAL" : "THIS PROJECT"} · ${shortDate(entry.date)} · #${entry.id}`}</b></text>
+                    <text fg={props.ctx.theme.text.base} wrapMode="word">{entryText(entry)}</text>
                   </box>
                 )}</For>
               )}
-              <text fg={props.ctx.theme.text.subdued}>{status()!.legacyUnscoped ? `${status()!.legacyUnscoped} older unscoped entries` : "All memories are scoped"}</text>
+              <text fg={props.ctx.theme.text.muted}>{status()!.legacyUnscoped ? `${status()!.legacyUnscoped} older unscoped entries` : "All memories are scoped"}</text>
             </box>
           ) : null}
         </box>
-      ) : <text fg={props.ctx.theme.text.subdued}>{state().loading ? "Loading memory…" : "Memory unavailable"}</text>}
+      ) : <text fg={props.ctx.theme.text.muted}>{state().loading ? "Loading memory…" : "Memory unavailable"}</text>}
       <CardAction
         theme={props.ctx.theme}
         label={expanded() ? "▴ Hide memories" : "▸ View memories"}

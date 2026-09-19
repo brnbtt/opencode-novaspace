@@ -44,17 +44,17 @@ export function DragOverlay(props: { drag: SidebarDrag; ctx: TuiContext }) {
             <box
               id="sidebar-bottom-drop-hint" position="absolute" zIndex={3}
               left={target()!.rect.x} top={target()!.rect.y} width={target()!.rect.width} height={Math.max(4, target()!.rect.height - 1)}
-              border borderColor={props.ctx.theme.text.feedback.info.default}
+              border borderColor={props.ctx.theme.text.feedback.info.base}
               backgroundColor={cardSurface(props.ctx.theme, 0.25)} justifyContent="center" alignItems="center" paddingLeft={1} paddingRight={1}
             >
-              <text selectable={false} fg={props.ctx.theme.text.feedback.info.default}>{state()!.fromBottom
+              <text selectable={false} fg={props.ctx.theme.text.feedback.info.base}>{state()!.fromBottom
                 ? target()!.before ? `Move before ${cards()[target()!.before!].title}` : "Move to the last bottom page"
                 : "Add this card to the bottom"}</text>
-              <text selectable={false} fg={props.ctx.theme.text.subdued}>{state()!.fromBottom ? "Release to reorder" : "Release to pin"}</text>
+              <text selectable={false} fg={props.ctx.theme.text.muted}>{state()!.fromBottom ? "Release to reorder" : "Release to pin"}</text>
             </box>
           </Show>
           <Show when={target()?.pin === false}>
-            <box id="sidebar-drop-line" position="absolute" zIndex={1} left={target()!.rect.x} top={target()!.line} width={target()!.rect.width} height={1} border={["top"]} borderColor={props.ctx.theme.text.feedback.info.default} />
+            <box id="sidebar-drop-line" position="absolute" zIndex={1} left={target()!.rect.x} top={target()!.line} width={target()!.rect.width} height={1} border={["top"]} borderColor={props.ctx.theme.text.feedback.info.base} />
           </Show>
           <FloatingCard
             snapshot={state()!.preview} theme={props.ctx.theme}

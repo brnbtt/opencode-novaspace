@@ -36,14 +36,14 @@ export function SessionInfoCard(props: CardProps) {
     <Card drag={props.drag} theme={props.ctx.theme} strength={props.pin ? props.options.pinnedSurfaceStrength : props.options.surfaceStrength} hoverStrength={props.options.hoverStrength} hoverDuration={props.options.hoverDuration}>
       <box {...cardHeader}><CardTitle theme={props.ctx.theme} title="Session info" drag={props.drag} /></box>
       <box {...metricRow}>
-        <text fg={props.ctx.theme.text.subdued}>Context</text>
-        <text fg={props.ctx.theme.text.default}>{context() ? `${context()!.tokens.toLocaleString()}${percent() === undefined ? " tokens" : ` · ${percent()}%`}` : "—"}</text>
+        <text fg={props.ctx.theme.text.muted}>Context</text>
+        <text fg={props.ctx.theme.text.base}>{context() ? `${context()!.tokens.toLocaleString()}${percent() === undefined ? " tokens" : ` · ${percent()}%`}` : "—"}</text>
       </box>
       <box {...metricRow}>
-        <text fg={props.ctx.theme.text.subdued}>Spent</text>
-        <text fg={props.ctx.theme.text.default}>{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cost())}</text>
+        <text fg={props.ctx.theme.text.muted}>Spent</text>
+        <text fg={props.ctx.theme.text.base}>{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cost())}</text>
       </box>
-      <text fg={props.ctx.theme.text.subdued} wrapMode="none" truncate>{`${path()}${branch() ? `:${branch()}` : ""}`}</text>
+      <text fg={props.ctx.theme.text.muted} wrapMode="none" truncate>{`${path()}${branch() ? `:${branch()}` : ""}`}</text>
     </Card>
   )
 }

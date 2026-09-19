@@ -69,21 +69,21 @@ export function SubagentsCard(props: CardProps) {
       <box {...cardHeader}>
         <CardTitle theme={props.ctx.theme} title="Subagents" drag={props.drag} />
         {agents().length ? (
-          <text fg={props.ctx.theme.text.subdued}>{`● ${running()}  ○ ${idle()}  ✓ ${done()}  × ${failed()}`}</text>
+          <text fg={props.ctx.theme.text.muted}>{`● ${running()}  ○ ${idle()}  ✓ ${done()}  × ${failed()}`}</text>
         ) : null}
       </box>
-      {agents().length === 0 ? <text fg={props.ctx.theme.text.subdued}>No subagents yet.</text> : (
+      {agents().length === 0 ? <text fg={props.ctx.theme.text.muted}>No subagents yet.</text> : (
         <box flexDirection="column" gap={1}>
           <For each={agents().slice(0, 4)}>{(agent) => {
             const status = () => sessionStatus(props, agent)
             const active = () => hovered() === agent.id
             const color = () => isActive(status())
-              ? props.ctx.theme.text.feedback.info.default
+              ? props.ctx.theme.text.feedback.info.base
               : status() === "failed" || status() === "error"
-                ? props.ctx.theme.text.feedback.error.default
+                ? props.ctx.theme.text.feedback.error.base
                 : status() === "succeeded" || status() === "completed"
-                  ? props.ctx.theme.text.feedback.success.default
-                  : props.ctx.theme.text.subdued
+                  ? props.ctx.theme.text.feedback.success.base
+                  : props.ctx.theme.text.muted
             return (
               <box
                 flexDirection="column"
@@ -93,11 +93,11 @@ export function SubagentsCard(props: CardProps) {
                   onMouseUp={(event) => { if (!props.dragging && !event.isDragging && event.button === 0) props.ctx.ui.router.navigate({ type: "session", sessionID: agent.id }) }}
               >
                 <text fg={color()} wrapMode="word"><b>{`${icon(status(), tick())} ${agent.title ?? agent.id}`}</b></text>
-                <text fg={props.ctx.theme.text.subdued}>{`${status()} · ${elapsed(agent, status())} · ${agent.agent ?? "general"}`}</text>
+                <text fg={props.ctx.theme.text.muted}>{`${status()} · ${elapsed(agent, status())} · ${agent.agent ?? "general"}`}</text>
               </box>
             )
           }}</For>
-          {agents().length > 4 ? <text fg={props.ctx.theme.text.subdued}>{`+ ${agents().length - 4} more`}</text> : null}
+          {agents().length > 4 ? <text fg={props.ctx.theme.text.muted}>{`+ ${agents().length - 4} more`}</text> : null}
         </box>
       )}
     </Card>

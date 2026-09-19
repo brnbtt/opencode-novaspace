@@ -15,7 +15,7 @@ function mix(from: RGBA, to: RGBA, amount: number) {
 }
 
 export function cardSurface(theme: Theme, strength: number) {
-  return mix(parseColor(theme.background.default), parseColor(theme.background.action.primary.hovered), strength)
+  return mix(parseColor(theme.background.base), parseColor(theme.background.action.primary.hovered), strength)
 }
 
 export function nativeScrollbar(theme: Theme): ScrollBoxOptions["verticalScrollbarOptions"] {
@@ -23,8 +23,8 @@ export function nativeScrollbar(theme: Theme): ScrollBoxOptions["verticalScrollb
     width: 1,
     showArrows: false,
     trackOptions: {
-      backgroundColor: theme.background.default,
-      foregroundColor: theme.border?.default ?? theme.scrollbar?.default ?? theme.text.subdued,
+      backgroundColor: theme.background.base,
+      foregroundColor: theme.border?.base ?? theme.scrollbar?.base ?? theme.text.muted,
     },
   }
 }
@@ -36,7 +36,7 @@ export function Divider(props: { theme: Theme; strong?: boolean }) {
       flexShrink={0}
       border={["top"]}
       borderStyle="single"
-      borderColor={props.strong ? mix(parseColor(props.theme.background.default), parseColor(props.theme.text.subdued), 0.55) : cardSurface(props.theme, 0.18)}
+      borderColor={props.strong ? mix(parseColor(props.theme.background.base), parseColor(props.theme.text.muted), 0.55) : cardSurface(props.theme, 0.18)}
     />
   )
 }
@@ -120,10 +120,10 @@ export function CardTitle(props: { theme: Theme; title: string; drag?: CardDragB
           onMouseOver={() => setHovered(true)} onMouseOut={() => setHovered(false)}
           onMouseDown={(event) => drag().manager.start(drag().sessionID, drag().id, event)}
         >
-          <text selectable={false} fg={hovered() ? props.theme.text.feedback.info.default : props.theme.text.subdued}>⠿</text>
+          <text selectable={false} fg={hovered() ? props.theme.text.feedback.info.base : props.theme.text.muted}>⠿</text>
         </box>
       )}</Show>
-      <text minWidth={0} wrapMode="none" truncate fg={props.theme.text.default}><b>{props.title}</b></text>
+      <text minWidth={0} wrapMode="none" truncate fg={props.theme.text.base}><b>{props.title}</b></text>
     </box>
   )
 }
@@ -152,7 +152,7 @@ export function actionBox(theme: Theme, hovered: boolean, subtle = false) {
 }
 
 export function actionText(theme: Theme, hovered: boolean, muted = false) {
-  return hovered ? theme.text.action.primary.hovered : muted ? theme.text.subdued : theme.text.feedback.info.default
+  return hovered ? theme.text.action.primary.hovered : muted ? theme.text.muted : theme.text.feedback.info.base
 }
 
 export function CardAction(props: {

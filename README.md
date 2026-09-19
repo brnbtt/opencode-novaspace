@@ -13,7 +13,7 @@ endorsed by Microsoft or the OpenCode project.
 
 The framework ships two generic cards, active by default on a fresh install:
 
-- **Profile & setup** — pinned GitHub profile and setup inventory with a
+- **Profile & setup** — pinned local/GitHub profile and setup inventory with a
   compact customization hub.
 - **Session info** — pinned context tokens, context usage, cost, and
   workspace/branch, using the native OpenCode sidebar data.
@@ -48,10 +48,12 @@ flags machine-specific paths and possible literal secrets, lists local-only
 exclusions, and identifies project-specific configuration that remains owned
 by the project rather than the private global profile.
 
-The setup card resolves the current identity through `gh api user`, keeps sync
-state separate from GitHub authentication, and currently reports `● Local`.
-Its profile model already reserves `syncing`, `synced`, `pending`, and `error`
-states for the planned settings synchronization feature.
+The setup card always starts in a usable local state from OpenCode's cached
+inventory. GitHub identity lookup runs only as background enrichment. A missing
+GitHub CLI, sign-in, or private profile repository is the normal unconfigured
+state and reports `● Set up sync`; it never blocks local setup discovery. The
+profile model also reserves `syncing`, `synced`, `pending`, and `error` states
+for the planned settings synchronization feature.
 
 ## Arrange cards
 

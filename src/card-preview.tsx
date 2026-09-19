@@ -64,7 +64,7 @@ export function FloatingCard(props: { snapshot: CardSnapshot; theme: Theme; left
             />
           </Show>
         )}</For>
-        <box position="absolute" zIndex={1} left={0} top={0} width="100%" height="100%" border borderStyle="rounded" borderColor={props.theme.text.feedback.info.default} shouldFill={false} />
+        <box position="absolute" zIndex={1} left={0} top={0} width="100%" height="100%" border borderStyle="rounded" borderColor={props.theme.text.feedback.info.base} shouldFill={false} />
       </box>
     </box>
   )

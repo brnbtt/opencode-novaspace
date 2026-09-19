@@ -19,8 +19,8 @@ export function CopilotCard(props: CardProps) {
   const quota = createMemo(() => state().quota)
   const meter = createMemo(() => progress(quota()?.used ?? 0, quota()?.limit ?? null))
   const color = () => meter().percent >= 90
-    ? props.ctx.theme.text.feedback.error.default
-    : meter().percent >= 75 ? props.ctx.theme.text.feedback.warning.default : props.ctx.theme.text.feedback.info.default
+    ? props.ctx.theme.text.feedback.error.base
+    : meter().percent >= 75 ? props.ctx.theme.text.feedback.warning.base : props.ctx.theme.text.feedback.info.base
   void store.refresh()
   const timer = setInterval(() => void store.refresh(), REFRESH_MS)
   onCleanup(() => { unsubscribe(); clearInterval(timer); store.dispose() })
@@ -40,23 +40,23 @@ export function CopilotCard(props: CardProps) {
         />
       </box>
       <box {...metricRow}>
-        <text fg={props.ctx.theme.text.subdued}>Session (est.)</text>
-        <text fg={props.ctx.theme.text.default}>{session().available ? `≈ ${format(session().credits)} credits` : "—"}</text>
+        <text fg={props.ctx.theme.text.muted}>Session (est.)</text>
+        <text fg={props.ctx.theme.text.base}>{session().available ? `≈ ${format(session().credits)} credits` : "—"}</text>
       </box>
       <box {...metricRow}>
-        <text fg={props.ctx.theme.text.subdued}>Period</text>
+        <text fg={props.ctx.theme.text.muted}>Period</text>
         <text fg={color()}>{quota()
           ? `${format(quota()!.used)} / ${quota()!.limit === null ? "∞" : short(quota()!.limit!)} · ${meter().percent.toFixed(1)}%`
           : state().loading ? "Loading…" : "Unavailable"}</text>
       </box>
       {expanded() && quota() ? (
         <box flexDirection="column">
-          <text fg={props.ctx.theme.text.subdued}>Estimated from OpenCode cost; includes descendant workers.</text>
-          <text fg={props.ctx.theme.text.subdued}>{resetLabel(quota()!.resetAt)}</text>
-          <text fg={props.ctx.theme.text.subdued}>{quota()!.login}</text>
+          <text fg={props.ctx.theme.text.muted}>Estimated from OpenCode cost; includes descendant workers.</text>
+          <text fg={props.ctx.theme.text.muted}>{resetLabel(quota()!.resetAt)}</text>
+          <text fg={props.ctx.theme.text.muted}>{quota()!.login}</text>
         </box>
       ) : null}
-      {state().error ? <text fg={props.ctx.theme.text.feedback.warning.default}>{state().error}</text> : null}
+      {state().error ? <text fg={props.ctx.theme.text.feedback.warning.base}>{state().error}</text> : null}
       <CardAction
         theme={props.ctx.theme}
         label={expanded() ? "▴ Fewer details" : "▸ More details"}

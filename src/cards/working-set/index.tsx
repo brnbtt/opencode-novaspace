@@ -78,19 +78,19 @@ export function WorkingSetCard(props: CardProps) {
           onPress={() => void open()}
         />
       </box>
-      <text fg={props.ctx.theme.text.feedback.info.default} wrapMode="word">
+      <text fg={props.ctx.theme.text.feedback.info.base} wrapMode="word">
         <b>{`◆ ${props.ctx.ui.format?.path(location().directory) ?? location().directory.replace(/^\/Users\/[^/]+(?=\/|$)/, "~")}`}</b>
       </text>
       {state()?.branch || state()?.changed !== undefined ? (
         <box {...metricRow}>
-          <text fg={props.ctx.theme.text.subdued}>{compact(state()?.branch ?? "Working tree", 24)}</text>
-          <text flexShrink={0} fg={(state()?.changed ?? 0) > 0 ? props.ctx.theme.text.feedback.warning.default : props.ctx.theme.text.feedback.success.default}>
+          <text fg={props.ctx.theme.text.muted}>{compact(state()?.branch ?? "Working tree", 24)}</text>
+          <text flexShrink={0} fg={(state()?.changed ?? 0) > 0 ? props.ctx.theme.text.feedback.warning.base : props.ctx.theme.text.feedback.success.base}>
             {(state()?.changed ?? 0) > 0 ? `${state()!.changed} changed` : "Clean"}
           </text>
         </box>
       ) : null}
-      {unavailable() ? <text fg={props.ctx.theme.text.subdued}>Git status unavailable</text> : null}
-      <text fg={props.ctx.theme.text.subdued} wrapMode="word">
+      {unavailable() ? <text fg={props.ctx.theme.text.muted}>Git status unavailable</text> : null}
+      <text fg={props.ctx.theme.text.muted} wrapMode="word">
         {session()?.model ? `${session()!.model!.id}${session()!.model!.variant ? ` · ${session()!.model!.variant}` : ""}` : "Model pending"}
       </text>
     </Card>

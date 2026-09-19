@@ -2,12 +2,12 @@ import type { JSX } from "solid-js"
 import type { TuiContext } from "../src/types"
 
 export const theme = {
-  background: { default: "#102030", action: { primary: { hovered: "#90a0b0" } } },
+  background: { base: "#102030", action: { primary: { hovered: "#90a0b0" } } },
   text: {
-    default: "#eeeeee", subdued: "#aaaaaa", action: { primary: { hovered: "#ffffff" } },
+    base: "#eeeeee", muted: "#aaaaaa", action: { primary: { hovered: "#ffffff" } },
     feedback: {
-      info: { default: "#00aaff" }, warning: { default: "#ffaa00" },
-      success: { default: "#00cc66" }, error: { default: "#ff4444" },
+      info: { base: "#00aaff" }, warning: { base: "#ffaa00" },
+      success: { base: "#00cc66" }, error: { base: "#ff4444" },
     },
   },
 }

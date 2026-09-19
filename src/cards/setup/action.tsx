@@ -29,7 +29,7 @@ export function SetupActionLink(props: {
         props.onPress()
       }}
     >
-      <text selectable={false} fg={hovered() ? props.ctx.theme.text.action.primary.hovered : props.ctx.theme.text.feedback.info.default}>{props.label}</text>
+      <text selectable={false} fg={hovered() ? props.ctx.theme.text.action.primary.hovered : props.ctx.theme.text.feedback.info.base}>{props.label}</text>
     </box>
   )
 }

@@ -9,7 +9,8 @@ import { resolveOptions } from "../src/config"
 import { Card, cardSurface } from "../src/ui"
 import { SetupCard } from "../src/cards/setup/index"
 import { setupOpenCommand } from "../src/cards/setup/modal"
-import { emptyInventory, loadSetupInventory } from "../src/cards/setup/inventory"
+import { cachedSetupInventory, emptyInventory, loadSetupInventory, type SetupInventory } from "../src/cards/setup/inventory"
+import type { ProfileState } from "../src/cards/setup/profile"
 import type { StandardizationPreflight } from "../src/cards/setup/preflight"
 import { latestContext, SessionInfoCard } from "../src/cards/session-info/index"
 import { context, theme } from "./support"
@@ -83,7 +84,7 @@ test("opens the compact setup hub from the main card", async () => {
       sessionID="session"
       options={options}
       pin="top"
-      loadProfile={async () => ({ login: "example", connection: "connected", sync: "local" })}
+      loadProfile={async () => ({ login: "example", connection: "connected", sync: "unconfigured" })}
       loadInventory={async () => inventory}
       loadPreflight={async () => preflight}
       openTarget={async (target) => { opened.push(target.path) }}
@@ -93,7 +94,7 @@ test("opens the compact setup hub from the main card", async () => {
     const frame = await card.waitForFrame((value) => value.includes("Skills"))
     expect(frame).toContain("@example")
     expect(frame).not.toContain("⠿")
-    expect(frame).toContain("● Local")
+    expect(frame).toContain("● Set up sync")
     expect(frame.split("\n")[2]).toContain("─")
     expect(frame).toContain("Skills")
     expect(frame).toContain("10 ready")
@@ -257,6 +258,46 @@ test("opens the compact setup hub from the main card", async () => {
   }
   if (process.platform === "darwin") {
     expect(setupOpenCommand({ path: "/tmp/example.md", kind: "file" })).toEqual(["/usr/bin/open", "/tmp/example.md"])
+  }
+})
+
+test("renders a usable local setup before optional GitHub sync is configured", async () => {
+  const ctx = context()
+  const options = resolveOptions(ctx.options)
+  let profileLoads = 0
+  let inventoryLoads = 0
+  let resolveProfile!: (value: ProfileState) => void
+  let resolveInventory!: (value: SetupInventory) => void
+  const profile = new Promise<ProfileState>((resolve) => { resolveProfile = resolve })
+  const inventory = new Promise<SetupInventory>((resolve) => { resolveInventory = resolve })
+  const view = await testRender(() => (
+    <SetupCard
+      ctx={ctx}
+      sessionID="session"
+      options={options}
+      pin="top"
+      loadProfile={() => { profileLoads++; return profile }}
+      loadInventory={() => { inventoryLoads++; return inventory }}
+    />
+  ), { width: 38, height: 15 })
+  try {
+    const local = await view.waitForFrame((frame) => frame.includes("Local profile") && frame.includes("Set up sync"))
+    expect(local).toContain("Skills")
+    expect(local).toContain("10 ready")
+    expect(local).toContain("MCP")
+    expect(local).not.toContain("Checking GitHub")
+    expect(local).not.toContain("Inspecting customization layers")
+    expect(profileLoads).toBe(1)
+    expect(inventoryLoads).toBe(1)
+
+    resolveProfile({ login: "example", connection: "connected", sync: "unconfigured" })
+    resolveInventory(cachedSetupInventory(ctx))
+    const enriched = await view.waitForFrame((frame) => frame.includes("@example"))
+    expect(enriched).toContain("Set up sync")
+    expect(profileLoads).toBe(1)
+    expect(inventoryLoads).toBe(1)
+  } finally {
+    view.renderer.destroy()
   }
 })
 

@@ -145,6 +145,45 @@ function pluginTarget(path: string | undefined, settings: SetupTarget | undefine
   return { path, kind: /\.[cm]?[jt]sx?$/.test(path) ? "file" : "folder" }
 }
 
+function cachedSkills(ctx: TuiContext, location: Location): InventoryItem[] {
+  return (ctx.data.location.skill?.list(location) ?? []).map((skill) => ({
+    name: skill.name ?? skill.id ?? "Unnamed skill",
+    detail: skill.description,
+    target: skill.location ? { path: skill.location, kind: "file" } : undefined,
+  }))
+}
+
+function cachedMcp(ctx: TuiContext, location: Location): InventoryItem[] {
+  return (ctx.data.location.mcp?.server?.list(location) ?? []).map((server) => ({
+    name: server.name ?? "Unnamed MCP",
+    detail: status(server),
+    state: status(server) === "connected" ? "success" : "warning",
+  }))
+}
+
+function cachedAgents(ctx: TuiContext, location: Location): InventoryItem[] {
+  return (ctx.data.location.agent?.list(location) ?? [])
+    .filter((agent) => agent.id && !builtInAgents.has(agent.id))
+    .map((agent) => ({
+      name: agent.id!,
+      detail: [modelLabel(agent.model), agent.description].filter(Boolean).join(" · "),
+    }))
+}
+
+/** A useful first frame from OpenCode's local cache; network and sync setup are optional enrichment. */
+export function cachedSetupInventory(ctx: TuiContext): SetupInventory {
+  const location = ctx.data.location.default()
+  return {
+    skills: cachedSkills(ctx, location),
+    instructions: [],
+    plugins: [],
+    mcp: cachedMcp(ctx, location),
+    agents: cachedAgents(ctx, location),
+    targets: {},
+    files: {},
+  }
+}
+
 export async function loadSetupInventory(ctx: TuiContext, options: { home?: string } = {}): Promise<SetupInventory> {
   const location = ctx.data.location.default()
   await syncCollections(ctx, location)
@@ -198,9 +237,9 @@ export async function loadSetupInventory(ctx: TuiContext, options: { home?: stri
   const pluginsTarget = pluginsFolder ?? settingsFolderTarget
   const agentsTarget = agentsFolder ?? settingsFolderTarget
   const [skillsFiles, pluginFiles, agentFiles] = await Promise.all([
-    filesUnder(skillsTarget),
-    filesUnder(pluginsFolder),
-    filesUnder(agentsFolder),
+    within(filesUnder(skillsTarget), 5_000, "Skill file inventory"),
+    within(filesUnder(pluginsFolder), 5_000, "Plugin file inventory"),
+    within(filesUnder(agentsFolder), 5_000, "Subagent file inventory"),
   ])
   const settingsFile = settings ? [settings] : []
 

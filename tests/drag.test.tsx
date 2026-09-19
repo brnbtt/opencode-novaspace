@@ -126,10 +126,10 @@ test("floating preview preserves the full expanded card, styles, and pickup stat
     const binding = { manager: drag, sessionID: "session", id: "memory" as const }
     return <Card theme={theme} strength={0.14} drag={binding}>
       <CardTitle theme={theme} title="Expanded card" drag={binding} />
-      <text fg={theme.text.feedback.info.default}>Ready to drag</text>
+      <text fg={theme.text.feedback.info.base}>Ready to drag</text>
       <text wrapMode="word">This wrapped description must keep the same line breaks.</text>
       <text><b>Quota</b>{` ${value()}`}</text>
-      <text fg={theme.text.feedback.success.default}>Expanded Ω details</text>
+      <text fg={theme.text.feedback.success.base}>Expanded Ω details</text>
     </Card>
   }
   const view = await testRender(() => {

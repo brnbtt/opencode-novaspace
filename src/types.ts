@@ -32,21 +32,21 @@ export type SessionMessage = {
 }
 
 export type Theme = {
-  border?: { default: Color }
-  scrollbar?: { default: Color }
+  border?: { base: Color }
+  scrollbar?: { base: Color }
   background: {
-    default: Color
+    base: Color
     action: { primary: { hovered: Color } }
   }
   text: {
-    default: Color
-    subdued: Color
+    base: Color
+    muted: Color
     action: { primary: { hovered: Color } }
     feedback: {
-      info: { default: Color }
-      warning: { default: Color }
-      success: { default: Color }
-      error: { default: Color }
+      info: { base: Color }
+      warning: { base: Color }
+      success: { base: Color }
+      error: { base: Color }
     }
   }
 }
