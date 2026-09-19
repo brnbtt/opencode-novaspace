@@ -22,8 +22,9 @@ export function DragOverlay(props: { drag: SidebarDrag; ctx: TuiContext }) {
   })
   const previewTop = () => {
     const desired = state()!.y - state()!.preview.grabY
+    const destination = target()
     // Leave the footer prompt visible while the carried card floats above it.
-    const limit = target()?.pin === "bottom" ? target()!.rect.y - previewSize().height - 1 : dimensions().height - previewSize().height - 1
+    const limit = destination?.pin === "bottom" ? destination.rect.y - previewSize().height - 1 : dimensions().height - previewSize().height - 1
     return Math.max(0, Math.min(desired, limit))
   }
   return (
@@ -39,22 +40,22 @@ export function DragOverlay(props: { drag: SidebarDrag; ctx: TuiContext }) {
             Two stable full-screen nodes keep mouseup from reaching app actions. */}
         <box id="sidebar-drag-capture" position="absolute" left={0} top={0} width="100%" height="100%" />
         <Show when={state()?.moved}>
-          <Show when={target()?.pin === "bottom"}>
-            <box
-              id="sidebar-bottom-drop-hint" position="absolute" zIndex={3}
-              left={target()!.rect.x} top={target()!.rect.y} width={target()!.rect.width} height={Math.max(4, target()!.rect.height - 1)}
-              border borderColor={props.ctx.theme.text.feedback.info.base}
-              backgroundColor={cardSurface(props.ctx.theme, 0.25)} justifyContent="center" alignItems="center" paddingLeft={1} paddingRight={1}
-            >
-              <text selectable={false} fg={props.ctx.theme.text.feedback.info.base}>{state()!.fromBottom
-                ? target()!.before ? `Move before ${cards()[target()!.before!].title}` : "Move to the last bottom page"
-                : "Add this card to the bottom"}</text>
-              <text selectable={false} fg={props.ctx.theme.text.muted}>{state()!.fromBottom ? "Release to reorder" : "Release to pin"}</text>
-            </box>
-          </Show>
-          <Show when={target()?.pin === false}>
-            <box id="sidebar-drop-line" position="absolute" zIndex={1} left={target()!.rect.x} top={target()!.line} width={target()!.rect.width} height={1} border={["top"]} borderColor={props.ctx.theme.text.feedback.info.base} />
-          </Show>
+          <Show when={target()?.pin === "bottom" ? target() : undefined}>{(destination) => (
+              <box
+                id="sidebar-bottom-drop-hint" position="absolute" zIndex={3}
+                left={destination().rect.x} top={destination().rect.y} width={destination().rect.width} height={Math.max(4, destination().rect.height - 1)}
+                border borderColor={props.ctx.theme.text.feedback.info.base}
+                backgroundColor={cardSurface(props.ctx.theme, 0.25)} justifyContent="center" alignItems="center" paddingLeft={1} paddingRight={1}
+              >
+                <text selectable={false} fg={props.ctx.theme.text.feedback.info.base}>{state()!.fromBottom
+                  ? destination().before ? `Move before ${cards()[destination().before!].title}` : "Move to the last bottom page"
+                  : "Add this card to the bottom"}</text>
+                <text selectable={false} fg={props.ctx.theme.text.muted}>{state()!.fromBottom ? "Release to reorder" : "Release to pin"}</text>
+              </box>
+            )}</Show>
+          <Show when={target()?.pin === false ? target() : undefined}>{(destination) => (
+            <box id="sidebar-drop-line" position="absolute" zIndex={1} left={destination().rect.x} top={destination().line} width={destination().rect.width} height={1} border={["top"]} borderColor={props.ctx.theme.text.feedback.info.base} />
+          )}</Show>
           <FloatingCard
             snapshot={state()!.preview} theme={props.ctx.theme}
             left={Math.max(0, Math.min(state()!.x - state()!.preview.grabX, dimensions().width - previewSize().width - 1))}
