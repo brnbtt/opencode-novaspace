@@ -1,0 +1,25 @@
+{
+  "name": "opencode-novaspace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "novaSpace: a configurable card-based OpenCode sidebar and profile manager",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./tui": "./tui.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test --preload @opentui/solid/preload"
+  },
+  "dependencies": {
+    "@opentui/core": "0.5.8",
+    "@opentui/keymap": "0.5.8",
+    "@opentui/solid": "0.5.8",
+    "solid-js": "1.9.15"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.0",
+    "typescript": "^5.8.2"
+  }
+}
