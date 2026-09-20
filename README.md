@@ -97,13 +97,16 @@ opencode plugin add 'git+https://github.com/brnbtt/opencode-novaspace.git#<commi
 > package's `devDependencies` (`solid-js`, `@opentui/*`) into an isolated tree.
 > The plugin then resolves its own copy of Solid instead of the host's, so the
 > sidebar renders its first frame and never updates: inventory counts, the
-> GitHub profile, and session context all stay frozen. An npm install resolves
-> peers against the host and does not have this problem. Prefer the published
-> package once `opencode-novaspace` is on npm:
+> GitHub profile, and session context all stay frozen. Use the published npm
+> package instead:
 >
 > ```sh
 > opencode plugin add opencode-novaspace@0.1.0
 > ```
+>
+> The npm package declares its OpenTUI and Solid peers as optional
+> (`peerDependenciesMeta`) so installers do not materialize a second runtime in
+> the plugin's cache directory, and imports resolve against the host.
 
 Restart the TUI completely after installing. Reloading the service alone does
 not rebuild the already-mounted sidebar.
@@ -202,9 +205,9 @@ installed copy.
 ## Releases
 
 Git commit installation is the stable channel until the first npm release, but
-it is a degraded one: see the limitation under "Installation". Publishing to npm
-is what makes peer dependencies resolve against the host, so the first release
-is a correctness fix rather than packaging polish.
+it is a degraded one: see the limitation under "Installation". Peer
+dependencies must stay optional in `peerDependenciesMeta` so a managed install
+never materializes a second Solid/OpenTUI runtime beside the plugin.
 
 Before publishing `opencode-novaspace`:
 

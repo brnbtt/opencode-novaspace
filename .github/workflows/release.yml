@@ -49,7 +49,6 @@ jobs:
           esac
 
       - name: Publish
+        # Authentication comes from GitHub's OIDC token via npm trusted
+        # publishing, so no npm credential is stored in this repository.
         run: npm publish --provenance --access public --tag "$dist_tag"
-        env:
-          # Remove this secret once trusted publishing is configured; npm then uses OIDC.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

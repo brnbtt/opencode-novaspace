@@ -1,6 +1,6 @@
 {
   "name": "opencode-novaspace",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "novaSpace: a configurable card-based OpenCode sidebar and profile manager",
   "license": "MIT",
   "repository": {
@@ -27,6 +27,11 @@
     "@opentui/core": ">=0.5.8",
     "@opentui/solid": ">=0.5.8",
     "solid-js": ">=1.9.0"
+  },
+  "peerDependenciesMeta": {
+    "@opentui/core": { "optional": true },
+    "@opentui/solid": { "optional": true },
+    "solid-js": { "optional": true }
   },
   "devDependencies": {
     "@opentui/core": "0.5.8",

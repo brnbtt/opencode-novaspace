@@ -50,3 +50,13 @@ test("documents installation and keeps card options in cli.json", async () => {
   expect(configSection).toContain("cli.json")
   expect(configSection).not.toMatch(/```jsonc\n\{\n  "plugins"/)
 })
+
+test("keeps host runtime peers optional so installs stay single-runtime", async () => {
+  const manifest = await Bun.file(new URL("../package.json", import.meta.url).pathname).json()
+  // A materialized copy of these beside the plugin gives it a second Solid
+  // runtime: the sidebar then renders one frame and never reacts again.
+  for (const peer of ["@opentui/core", "@opentui/solid", "solid-js"]) {
+    expect(manifest.peerDependencies[peer]).toBeString()
+    expect(manifest.peerDependenciesMeta?.[peer]?.optional).toBe(true)
+  }
+})
