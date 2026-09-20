@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { Card, cardHeader, Divider, metricRow } from "../../ui"
 import { defineCard, type CardProps } from "../../card"
 import { cachedSetupInventory, loadSetupInventory, setupSections, type SetupInventory, type SetupSection } from "./inventory"
@@ -31,6 +31,7 @@ export function SetupCard(props: CardProps & {
 }) {
   const [inventory, setInventory] = createSignal<SetupInventory>(cachedSetupInventory(props.ctx))
   const [inventoryLoading, setInventoryLoading] = createSignal(true)
+  const [inventoryError, setInventoryError] = createSignal<string>()
   const [profile, setProfile] = createSignal<ProfileState>({ connection: "signed-out", sync: "unconfigured" })
   const [revealed, setRevealed] = createSignal(0)
   let sweep: ReturnType<typeof setInterval> | undefined
@@ -42,9 +43,15 @@ export function SetupCard(props: CardProps & {
     setInventoryLoading(true)
     try {
       const value = await (props.loadInventory ?? loadSetupInventory)(props.ctx)
-      if (!disposed && current === refreshID) setInventory(value)
-    } catch {
-      // Cached local inventory remains usable when optional enrichment fails.
+      if (!disposed && current === refreshID) {
+        setInventory(value)
+        setInventoryError(undefined)
+      }
+    } catch (error) {
+      // Cached local inventory stays usable, but never report a failed lookup as an empty machine.
+      if (!disposed && current === refreshID) {
+        setInventoryError(error instanceof Error ? error.message : "Setup inventory unavailable")
+      }
     } finally {
       if (!disposed && current === refreshID) setInventoryLoading(false)
     }
@@ -131,6 +138,13 @@ export function SetupCard(props: CardProps & {
       <box flexDirection="column">
         {rows().map((row, index) => <Layer row={row} index={index} revealed={revealed()} ctx={props.ctx} />)}
       </box>
+      <Show when={inventoryError()}>{(reason) => (
+        <box {...metricRow} height={1} flexShrink={0}>
+          <text selectable={false} flexGrow={1} minWidth={0} wrapMode="none" truncate fg={props.ctx.theme.text.feedback.warning.base}>
+            {`⚠ Stale counts · ${reason()}`}
+          </text>
+        </box>
+      )}</Show>
       <Divider theme={props.ctx.theme} strong />
       <box flexDirection="row" justifyContent="space-between" height={1} flexShrink={0}>
         <text selectable={false} fg={props.ctx.theme.text.feedback.info.base}>Manage settings</text>

@@ -23,7 +23,8 @@ framework and are opt-in through plugin options: Working Set (Git status),
 Subagents (activity), Memory (OptMem status), and GitHub Copilot (usage). They
 live in their own folders under `src/cards/` and are wired in
 `src/cards/registry.tsx`; a fresh install does not show them unless its
-`opencode.json(c)` options list them. See "Project structure" for how to add
+`opencode.json(c)` lists the plugin and `cli.json` lists them in its options. See
+"Project structure" for how to add
 your own and "Publish a framework-only build" for how to drop these.
 
 The optional Memory card can read an existing OptMem installation. novaSpace
@@ -82,9 +83,39 @@ OpenCode's plugin storage (`sidebar-layout-v1`) and survive reloads/restarts.
 Plugin options supply the initial layout; the reset control restores them.
 Long bottom cards scroll within a height cap so the middle area remains usable.
 
+## Installation
+
+novaSpace is not published to npm yet. Until then, install the plugin from a
+pinned commit of this repository:
+
+```sh
+opencode plugin add 'git+https://github.com/brnbtt/opencode-novaspace.git#<commit>'
+```
+
+> **Known limitation.** Git installs are currently degraded. OpenCode's managed
+> package cache runs a full install for a Git specifier, which pulls this
+> package's `devDependencies` (`solid-js`, `@opentui/*`) into an isolated tree.
+> The plugin then resolves its own copy of Solid instead of the host's, so the
+> sidebar renders its first frame and never updates: inventory counts, the
+> GitHub profile, and session context all stay frozen. An npm install resolves
+> peers against the host and does not have this problem. Prefer the published
+> package once `opencode-novaspace` is on npm:
+>
+> ```sh
+> opencode plugin add opencode-novaspace@0.1.0
+> ```
+
+Restart the TUI completely after installing. Reloading the service alone does
+not rebuild the already-mounted sidebar.
+
 ## Configuration
 
-```jsonc
+novaSpace renders in the terminal, so its options are **CLI plugin options** and
+belong in `cli.json`, not `opencode.json(c)`. OpenCode delivers options declared
+in `opencode.json(c)` to a plugin's server half only; the TUI half receives an
+empty object, so options placed there are silently ignored.
+
+```jsonc title="~/.config/opencode/cli.json"
 {
   "plugins": [
     {
@@ -106,6 +137,9 @@ Long bottom cards scroll within a height cap so the middle area remains usable.
   ]
 }
 ```
+
+Keep the plugin itself listed in `opencode.json(c)`; OpenCode loads its TUI
+component automatically. The `cli.json` entry only supplies options.
 
 `surfaceStrength` blends the normal sidebar background toward the theme's
 hovered-action surface, so the cards remain subtle and work in light and dark
@@ -153,13 +187,13 @@ Example development-host override (the relative path is resolved from this
   "plugins": [
     "-novaspace",
     "-novaspace.tui",
-    {
-      "package": "./plugins/novaspace-dev",
-      "options": {}
-    }
+    "./plugins/novaspace-dev"
   ]
 }
 ```
+
+Card options for the development host go in `cli.json` like any other CLI
+plugin option, keyed by the same package path.
 
 Once published, the global profile should use a pinned stable package such as
 `opencode-novaspace@0.1.0`; active feature work should never be the globally
@@ -167,15 +201,25 @@ installed copy.
 
 ## Releases
 
-Git commit installation is the stable channel until the first npm release.
+Git commit installation is the stable channel until the first npm release, but
+it is a degraded one: see the limitation under "Installation". Publishing to npm
+is what makes peer dependencies resolve against the host, so the first release
+is a correctness fix rather than packaging polish.
+
 Before publishing `opencode-novaspace`:
 
 1. Verify CI, typecheck, tests, and `bun pm pack --dry-run`.
 2. Configure npm 2FA and GitHub trusted publishing for this repository.
+   Publish from CI: a local `npm publish` can target a corporate registry proxy.
 3. Remove `private: true`, then tag the matching `vX.Y.Z` commit.
 4. Publish with provenance and create release notes from the same tag.
 5. Update the global OpenCode profile from the prior full Git commit to the
    exact npm version only after installation verification.
+
+npm versions are immutable, so verify the install path with a `0.1.0-rc.N`
+prerelease on the `next` dist-tag before spending the `0.1.0` version. Confirm
+the managed cache no longer materializes `solid-js` or `@opentui/*` and that
+inventory counts, the GitHub profile, and session context update after mount.
 
 ## Project structure
 

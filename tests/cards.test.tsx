@@ -301,6 +301,29 @@ test("renders a usable local setup before optional GitHub sync is configured", a
   }
 })
 
+test("reports a failed inventory lookup instead of an empty machine", async () => {
+  const ctx = context()
+  const options = resolveOptions(ctx.options)
+  const view = await testRender(() => (
+    <SetupCard
+      ctx={ctx}
+      sessionID="session"
+      options={options}
+      pin="top"
+      loadProfile={() => Promise.resolve({ connection: "signed-out", sync: "unconfigured" } as ProfileState)}
+      loadInventory={() => Promise.reject(new Error("Plugin inventory timed out"))}
+    />
+  ), { width: 56, height: 16 })
+  try {
+    const failed = await view.waitForFrame((frame) => frame.includes("Stale counts"))
+    expect(failed).toContain("Plugin inventory timed out")
+    // The cached first frame stays visible so the card remains usable.
+    expect(failed).toContain("Skills")
+  } finally {
+    view.renderer.destroy()
+  }
+})
+
 test("native info uses current context, honours compaction/revert, and omits duplicate MCP info", async () => {
   const messages = [
     { id: "before", type: "assistant", tokens: { input: 800_000 } },

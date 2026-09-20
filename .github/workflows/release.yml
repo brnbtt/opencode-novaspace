@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required for npm provenance and, once configured, trusted publishing.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # OIDC trusted publishing needs a recent npm; the bundled version may lag.
+      - run: npm install -g npm@^11
+
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test --preload @opentui/solid/preload
+      - run: bun pm pack --dry-run
+
+      - name: Verify tag matches package version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$version" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package version $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_ENV"
+
+      # Prereleases stay off the latest tag so a plain install never picks one up.
+      - name: Resolve dist-tag
+        run: |
+          case "$version" in
+            *-*) echo "dist_tag=next" >> "$GITHUB_ENV" ;;
+            *) echo "dist_tag=latest" >> "$GITHUB_ENV" ;;
+          esac
+
+      - name: Publish
+        run: npm publish --provenance --access public --tag "$dist_tag"
+        env:
+          # Remove this secret once trusted publishing is configured; npm then uses OIDC.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

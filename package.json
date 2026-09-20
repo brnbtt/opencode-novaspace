@@ -1,7 +1,6 @@
 {
   "name": "opencode-novaspace",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.1.0-rc.1",
   "description": "novaSpace: a configurable card-based OpenCode sidebar and profile manager",
   "license": "MIT",
   "repository": {

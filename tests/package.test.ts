@@ -40,3 +40,13 @@ test("uses the host renderer for installed-package dimensions", async () => {
     expect(source).not.toContain('from "@opentui/solid"')
   }
 })
+
+test("documents installation and keeps card options in cli.json", async () => {
+  const readme = await Bun.file(new URL("../README.md", import.meta.url).pathname).text()
+  expect(readme).toContain("## Installation")
+  expect(readme).toContain("opencode plugin add")
+  // TUI plugins only receive options from cli.json; opencode.json(c) silently drops them.
+  const configSection = readme.slice(readme.indexOf("## Configuration"), readme.indexOf("## Development"))
+  expect(configSection).toContain("cli.json")
+  expect(configSection).not.toMatch(/```jsonc\n\{\n  "plugins"/)
+})
