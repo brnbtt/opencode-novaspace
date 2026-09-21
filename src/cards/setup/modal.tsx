@@ -1,12 +1,13 @@
 /** @jsxImportSource @opentui/solid */
 import { MouseButton } from "@opentui/core"
-import { For, Show } from "solid-js"
+import { createSignal, For, onMount, Show } from "solid-js"
 import type { TuiContext } from "../../types"
 import { cardSurface, nativeScrollbar, useHostDimensions } from "../../ui"
 import { displaySetupPath, SetupActionLink } from "./action"
 import { groupSetupSections, setupSections, type SetupInventory, type SetupTarget } from "./inventory"
 import type { StandardizationPreflight } from "./preflight"
 import { SyncOnboardingModal } from "./sync-onboarding"
+import { applyUpdate, checkForUpdate, installedVersion, loadUpdateState, updateSummary, type UpdateState } from "./update"
 
 export type OpenSetupTarget = (target: SetupTarget) => Promise<void>
 
@@ -113,8 +114,36 @@ export function SetupModal(props: {
   loading: boolean
   openTarget?: OpenSetupTarget
   loadPreflight?: (ctx: TuiContext) => Promise<StandardizationPreflight>
+  update?: {
+    load?: (ctx: TuiContext) => Promise<UpdateState>
+    check?: (ctx: TuiContext) => Promise<UpdateState>
+    apply?: (ctx: TuiContext, target: string) => Promise<UpdateState>
+  }
 }) {
   const dimensions = useHostDimensions(props.ctx)
+  const [update, setUpdate] = createSignal<UpdateState>({ status: "unknown" })
+  let disposed = false
+  const settle = (value: UpdateState) => { if (!disposed) setUpdate(value) }
+  onMount(() => {
+    void (props.update?.load ?? loadUpdateState)(props.ctx).then(settle)
+    // A registry round-trip is slower, so it lands after the cached state.
+    void (props.update?.check ?? checkForUpdate)(props.ctx).then((value) => {
+      if (value.status !== "error") settle(value)
+    })
+    return () => { disposed = true }
+  })
+  const runUpdate = () => {
+    const current = update()
+    if (current.status !== "outdated") return
+    const { target, version } = current
+    setUpdate({ status: "updating", target, version })
+    void (props.update?.apply ?? applyUpdate)(props.ctx, target).then((value) => {
+      settle(value)
+      props.ctx.ui.toast.show(value.status === "error"
+        ? { message: value.message, variant: "error" }
+        : { message: "novaSpace updated. Restart the TUI to load it.", variant: "success" })
+    })
+  }
   const open = (target: SetupTarget) => {
     void (props.openTarget ?? openSetupTarget)(target)
       .then(() => props.ctx.ui.toast.show({
@@ -138,6 +167,12 @@ export function SetupModal(props: {
   }
   const settingsGrouped = () => !!props.inventory.settings
     && groups().some((group) => group.files.some((file) => file.path === props.inventory.settings!.path))
+  const updateTone = () => {
+    const tone = updateSummary(update()).tone
+    if (tone === "error") return props.ctx.theme.text.feedback.error.base
+    if (tone === "info") return props.ctx.theme.text.base
+    return props.ctx.theme.text.muted
+  }
   return (
     <box
       id="sidebar-setup-modal"
@@ -152,7 +187,7 @@ export function SetupModal(props: {
     >
       <box flexDirection="row" justifyContent="space-between" flexShrink={0} height={1}>
         <text fg={props.ctx.theme.text.base}><b>novaSpace</b></text>
-        <text fg={props.ctx.theme.text.muted}>{props.ctx.app?.version ? `v${props.ctx.app.version}` : ""}</text>
+        <text fg={props.ctx.theme.text.muted}>{installedVersion(update()) ? `v${installedVersion(update())}` : ""}</text>
       </box>
       <text flexShrink={0} fg={props.ctx.theme.text.muted}>OpenCode customization at a glance.</text>
 
@@ -168,6 +203,13 @@ export function SetupModal(props: {
           <box id="setup-sync-panel" flexDirection="row" justifyContent="space-between" alignItems="center" paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1} backgroundColor={cardSurface(props.ctx.theme, 0.18)}>
             <text fg={props.ctx.theme.text.base}><b>Profile sync</b></text>
             <SetupActionLink id="setup-sync-open" ctx={props.ctx} label="Set up sync →" onPress={openSync} />
+          </box>
+
+          <box id="setup-update-panel" flexDirection="row" justifyContent="space-between" alignItems="center" paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1} backgroundColor={cardSurface(props.ctx.theme, 0.18)}>
+            <text selectable={false} flexGrow={1} minWidth={0} wrapMode="none" truncate fg={updateTone()}>{updateSummary(update()).label}</text>
+            <Show when={updateSummary(update()).action}>
+              {(label) => <SetupActionLink id="setup-update-apply" ctx={props.ctx} label={label()} onPress={runUpdate} />}
+            </Show>
           </box>
 
           <Show when={props.loading}>

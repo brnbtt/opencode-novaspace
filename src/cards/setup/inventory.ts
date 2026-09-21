@@ -252,7 +252,7 @@ export async function loadSetupInventory(ctx: TuiContext, options: { home?: stri
     instructions: instructionFiles.map((file) => ({ name: "AGENTS.md", detail: file.path, target: file })),
     plugins: plugins.filter((plugin) => plugin.source?.type !== "builtin").map((plugin) => ({
       name: plugin.id,
-      detail: [plugin.features?.server ? "server" : undefined, plugin.features?.tui ? "TUI" : undefined, plugin.source?.path ?? plugin.source?.package]
+      detail: [plugin.features?.server ? "server" : undefined, plugin.features?.tui ? "TUI" : undefined, plugin.source?.path ?? plugin.source?.target]
         .filter(Boolean).join(" · "),
       state: plugin.state?.status === "active" ? "success" : "warning",
       target: pluginTarget(plugin.source?.path, settings),

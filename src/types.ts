@@ -79,10 +79,12 @@ export type TuiContext = {
     plugin?: {
       list(input: { location: Location }): Promise<{ data: readonly {
         id: string
-        source?: { type?: string; path?: string; package?: string }
+        source?: { type?: string; path?: string; target?: string; version?: string; outdated?: boolean; updating?: boolean }
         features?: { server?: boolean; tui?: boolean }
         state?: { status?: string }
       }[] }>
+      check?(input: { target?: string }): Promise<unknown>
+      update?(input: { targets: readonly string[] }): Promise<unknown>
     }
     config?: {
       get(input: { location: Location }): Promise<{ data: readonly {

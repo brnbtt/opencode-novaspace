@@ -8,10 +8,11 @@ import type { BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
 import { resolveOptions } from "../src/config"
 import { Card, cardSurface } from "../src/ui"
 import { SetupCard } from "../src/cards/setup/index"
-import { setupOpenCommand } from "../src/cards/setup/modal"
+import { setupOpenCommand, SetupModal } from "../src/cards/setup/modal"
 import { cachedSetupInventory, emptyInventory, loadSetupInventory, type SetupInventory } from "../src/cards/setup/inventory"
 import type { ProfileState } from "../src/cards/setup/profile"
 import type { StandardizationPreflight } from "../src/cards/setup/preflight"
+import type { UpdateState } from "../src/cards/setup/update"
 import { latestContext, SessionInfoCard } from "../src/cards/session-info/index"
 import { context, theme } from "./support"
 
@@ -321,6 +322,99 @@ test("reports a failed inventory lookup instead of an empty machine", async () =
     expect(failed).toContain("Skills")
   } finally {
     view.renderer.destroy()
+  }
+})
+
+test("reloads the GitHub account when the setup hub is opened", async () => {
+  const ctx = context()
+  ctx.ui.dialog.show = () => {}
+  ctx.ui.dialog.set = () => {}
+  const options = resolveOptions(ctx.options)
+  const logins = ["before", "after"]
+  let profileLoads = 0
+  const view = await testRender(() => (
+    <SetupCard
+      ctx={ctx}
+      sessionID="session"
+      options={options}
+      pin="top"
+      loadProfile={async () => ({ login: logins[Math.min(profileLoads++, logins.length - 1)], connection: "connected", sync: "unconfigured" })}
+      loadInventory={async () => cachedSetupInventory(ctx)}
+    />
+  ), { width: 38, height: 15 })
+  try {
+    const initial = await view.waitForFrame((frame) => frame.includes("@before"))
+    const rows = initial.split("\n")
+    const manageRow = rows.findIndex((line) => line.includes("Manage settings"))
+    expect(manageRow).toBeGreaterThan(-1)
+    // `gh auth switch` can change the account at any time, so opening the hub
+    // must re-read it rather than keep the value captured at mount.
+    await view.mockMouse.click(6, manageRow)
+    const refreshed = await view.waitForFrame((frame) => frame.includes("@after"))
+    expect(refreshed).not.toContain("@before")
+    expect(profileLoads).toBe(2)
+  } finally {
+    view.renderer.destroy()
+  }
+})
+
+test("offers an update only for a managed package install", async () => {
+  const ctx = context()
+  const toasts: string[] = []
+  ctx.ui.toast.show = (toast) => { toasts.push(String(toast.message)) }
+  const applied: string[] = []
+  let resolveApply!: (value: UpdateState) => void
+  const pending = new Promise<UpdateState>((resolve) => { resolveApply = resolve })
+
+  const local = await testRender(() => (
+    <SetupModal
+      ctx={ctx}
+      inventory={emptyInventory()}
+      loading={false}
+      update={{
+        load: async () => ({ status: "local", path: "/plugins/novaspace" }),
+        check: async () => ({ status: "local", path: "/plugins/novaspace" }),
+      }}
+    />
+  ), { width: 54, height: 14 })
+  try {
+    const frame = await local.waitForFrame((value) => value.includes("Local checkout"))
+    // A checkout has no version to compare, so offering an update would lie.
+    expect(frame).not.toContain("Update →")
+  } finally {
+    local.renderer.destroy()
+  }
+
+  const managed = await testRender(() => (
+    <SetupModal
+      ctx={ctx}
+      inventory={emptyInventory()}
+      loading={false}
+      update={{
+        load: async () => ({ status: "current", target: "opencode-novaspace", version: "0.1.1" }),
+        check: async () => ({ status: "outdated", target: "opencode-novaspace", version: "0.1.1" }),
+        apply: async (_ctx, target) => { applied.push(target); return pending },
+      }}
+    />
+  ), { width: 54, height: 14 })
+  try {
+    // The cached state lands first, then the slower registry check flags it.
+    await managed.waitForFrame((value) => value.includes("v0.1.1"))
+    const offered = await managed.waitForFrame((value) => value.includes("Update →"))
+    const rows = offered.split("\n")
+    const updateRow = rows.findIndex((line) => line.includes("Update →"))
+    const column = rows[updateRow]!.indexOf("Update →")
+    await managed.mockMouse.click(column + 2, updateRow)
+    await managed.waitForFrame((value) => value.includes("Updating…"))
+    expect(applied).toEqual(["opencode-novaspace"])
+
+    resolveApply({ status: "current", target: "opencode-novaspace", version: "0.1.2" })
+    const done = await managed.waitForFrame((value) => value.includes("v0.1.2"))
+    expect(done).not.toContain("Update →")
+    // An already-mounted sidebar keeps running the previous code.
+    expect(toasts.some((message) => message.includes("Restart the TUI"))).toBe(true)
+  } finally {
+    managed.renderer.destroy()
   }
 })
 

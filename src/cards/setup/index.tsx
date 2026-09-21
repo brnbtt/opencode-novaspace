@@ -37,6 +37,25 @@ export function SetupCard(props: CardProps & {
   let sweep: ReturnType<typeof setInterval> | undefined
   let disposed = false
   let refreshID = 0
+  let profileID = 0
+  let profileAbort: AbortController | undefined
+
+  /**
+   * The signed-in account can change at any time (`gh auth switch`), so this
+   * has to be re-runnable rather than a one-shot mount effect.
+   */
+  const refreshProfile = async () => {
+    const current = ++profileID
+    profileAbort?.abort()
+    const controller = new AbortController()
+    profileAbort = controller
+    try {
+      const value = await (props.loadProfile ?? loadGitHubProfile)(controller.signal)
+      if (!disposed && current === profileID) setProfile(value)
+    } catch {
+      if (!disposed && current === profileID) setProfile({ connection: "signed-out", sync: "unconfigured" })
+    }
+  }
 
   const refreshInventory = async () => {
     const current = ++refreshID
@@ -58,14 +77,11 @@ export function SetupCard(props: CardProps & {
   }
   onMount(() => {
     void refreshInventory()
-    const controller = new AbortController()
-    void (props.loadProfile ?? loadGitHubProfile)(controller.signal)
-      .then((value) => { if (!controller.signal.aborted) setProfile(value) })
-      .catch(() => { if (!controller.signal.aborted) setProfile({ connection: "signed-out", sync: "unconfigured" }) })
-    onCleanup(() => controller.abort())
+    void refreshProfile()
   })
   onCleanup(() => {
     disposed = true
+    profileAbort?.abort()
     if (sweep) clearInterval(sweep)
   })
 
@@ -116,6 +132,7 @@ export function SetupCard(props: CardProps & {
     // show() replaces the host dialog and resets its size/centering.
     props.ctx.ui.dialog.set({ size: "medium", centered: true })
     if (!inventoryLoading()) void refreshInventory()
+    void refreshProfile()
   }
 
   return (
