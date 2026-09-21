@@ -31,27 +31,28 @@ The optional Memory card can read an existing OptMem installation. novaSpace
 does not register memory tools; the independent `opencode-optmem` plugin owns
 that capability.
 
-Every card uses the same theme-derived subtle surface, rounded border and hover
-transition. A gutter separates cards from the scrollbar in every theme.
+Cards use theme-derived subtle surfaces and rounded borders, with a scrollbar
+gutter. The main profile card stays visually still on hover. Its sync status is
+a colored dot; hovering the dot reveals its label and otherwise leaves room for
+the full account name. The small `✧` mark identifies **novaSpace settings**.
 
-The setup modal has a compact **Set up sync** entry, then mirrors the five layers
-on the card in the same order: Skills, Instructions, Plugins, MCP, and
-Subagents. Layers that share a source file are rendered together; for example,
-JSON-configured Plugins, MCP, and Subagents share one **OpenCode settings**
-section and one `opencode.json(c)` entry. Each section links to its detected
-folder and contributing files. Lists longer than five rows use a contrasting
-inset panel and scroll independently. The inner list consumes wheel input only
-while the pointer is inside it, leaving the outer modal available everywhere
-else. Files open through the operating system's default application.
+The settings modal shows each section's file or folder with one **Open** action.
+Shared configuration appears once: JSON-configured Plugins, MCP and Subagents
+share **OpenCode settings** and its `opencode.json(c)` link. Individual item lists
+and nested scroll areas have been removed. Files open in the operating system's
+default application. A single outer scrollbar is available on short terminals.
 
-The modal keeps update status and keyboard hints visible while its sections
-scroll. Use **Tab / Shift+Tab** to move between actions and **Enter** to activate
-one. **Terminal preferences** links directly to `cli.json`.
+Update status and keyboard hints stay visible. Use **Tab / Shift+Tab** to move
+between actions and **Enter** to activate one. **Appearance & preferences** links
+directly to `cli.json`.
 
 ### Profile sync
 
-**Set up sync** lets you choose groups, connect a private GitHub repository,
-and run two-way sync. After the first successful sync, enable **Automatic sync**
+The sync screen has compact **Files**, **Repository** and **Sync** views. Choose
+groups, connect a private GitHub repository, and run two-way sync. **Review** shows
+the selected files and portability warnings on a separate page; errors stay near
+the header. Enterprise-managed GitHub usernames with underscores are supported.
+After the first successful sync, enable **Automatic sync**
 to check once a minute while an OpenCode TUI is open. Use the same repository
 on another machine to restore your profile and keep the selected groups in step.
 GitHub CLI (`gh auth login`) is required. Sync is bound to the account used when
@@ -60,7 +61,7 @@ connecting; switching accounts pauses transfers until you reconnect or switch ba
 | Group | Included |
 | --- | --- |
 | OpenCode settings | Whole global `opencode.json` and `opencode.jsonc`: configured default model, providers, plugins, MCP, permissions, inline agents and commands |
-| Terminal preferences | `cli.json`: theme, keybindings, terminal preferences and novaSpace plugin options; global `themes/` files |
+| Appearance & preferences | `cli.json`: theme, keybindings, terminal preferences and novaSpace plugin options; global `themes/` files |
 | Skills | Global `skills/`, `~/.agents/skills/` and `~/.claude/skills/`, preserving their locations |
 | Instructions | Global `AGENTS.md` |
 | Agents & commands | Global `agents/` and `commands/` files |
@@ -69,8 +70,8 @@ connecting; switching accounts pauses transfers until you reconnect or switch ba
 Shared configuration is selected and transferred **once per file**. Selecting
 OpenCode settings includes Plugins, MCP and inline Subagents together; those
 sections are not split or rewritten. JSONC comments and formatting survive.
-The sync screen lists the exact local files and explains each group under
-**review details**. Saving a new selection pauses automation until you enable it again.
+The **Review** page lists the exact local files. Saving a new selection pauses
+automation until you enable it again.
 
 Session history, the current session's model choice, sign-ins and OAuth tokens,
 environment variables, service settings, caches, project configuration, installed
@@ -106,13 +107,13 @@ cross-process lease; concurrent remote writes use GitHub's revision check and re
 on the next sync. Offline failures keep local files and the last successful baseline.
 Restart OpenCode after restoring plugins or server settings that require a reload.
 
-**Review local layout** remains a read-only preflight. Moving compatibility
+**Local layout**, reached from **Review**, remains a read-only preflight. Moving compatibility
 folders into OpenCode's canonical layout is optional for sync.
 
 The setup card always starts in a usable local state from OpenCode's cached
 inventory. GitHub identity lookup runs only as background enrichment. A missing
 GitHub CLI, sign-in, or private profile repository is the normal unconfigured
-state and reports `● Set up sync`; it never blocks local setup discovery. The
+state and reports a muted dot with **Set up sync** on hover; it never blocks local setup discovery. The
 profile reports `syncing`, `synced`, `pending`, `paused`, `conflict`, and `error`
 from the local sync state.
 
@@ -141,7 +142,7 @@ install, offers an update when OpenCode reports one. See "Packaging".
   or drag sideways across the navigation row to switch pages. The selected page
   is a short neutral pill; other pages are muted dots. Navigation stays hidden
   when there is only one page.
-- **Manage settings** opens the compact setup hub and its configuration links.
+- **✧ novaSpace settings** opens the compact setup hub and its configuration links.
 
 Card titles and body text remain selectable, and buttons such as Refresh and
 Open in Zed retain their click actions. Only the grip starts a drag.

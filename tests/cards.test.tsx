@@ -90,7 +90,7 @@ test("opens the compact setup hub from the main card", async () => {
       sessionID="session"
       options={options}
       pin="top"
-      loadProfile={async () => ({ login: "example", connection: "connected", sync: "unconfigured" })}
+      loadProfile={async () => ({ login: "brunobett_microsoft", connection: "connected", sync: "unconfigured" })}
       loadInventory={async () => inventory}
       loadPreflight={async () => preflight}
       openTarget={async (target) => { opened.push(target.path) }}
@@ -99,9 +99,14 @@ test("opens the compact setup hub from the main card", async () => {
   ), { width: 38, height: 15 })
   try {
     const frame = await card.waitForFrame((value) => value.includes("Skills"))
-    expect(frame).toContain("@example")
+    expect(frame).toContain("@brunobett_microsoft")
     expect(frame).not.toContain("⠿")
-    expect(frame).toContain("● Set up sync")
+    expect(frame).not.toContain("Set up sync")
+    const status = card.renderer.root.findDescendantById("setup-sync-status")!
+    await card.mockMouse.moveTo(status.x + status.width - 1, status.y)
+    expect(await card.waitForFrame((value) => value.includes("Set up sync"))).toContain("Set up sync")
+    await card.mockMouse.moveTo(3, 4)
+    expect(await card.waitForFrame((value) => !value.includes("Set up sync"))).toContain("@brunobett_microsoft")
     expect(frame.split("\n")[2]).toContain("─")
     expect(frame).toContain("Skills")
     expect(frame).toContain("10 ready")
@@ -112,11 +117,11 @@ test("opens the compact setup hub from the main card", async () => {
     expect(frame).toContain("2 connected")
     expect(frame).toContain("Subagents")
     expect(frame).toContain("4 available")
-    expect(frame).toContain("Manage settings")
+    expect(frame).toContain("✧ novaSpace settings")
     const rows = frame.split("\n")
-    const manageRow = rows.findIndex((line) => line.includes("Manage settings"))
+    const manageRow = rows.findIndex((line) => line.includes("novaSpace settings"))
     expect(rows[manageRow - 1]).toContain("─")
-    // Clicking the "Manage settings" text (not just the divider) must open it.
+    // Clicking the settings text (not just the divider) must open it.
     await card.mockMouse.click(6, manageRow)
     expect(modal).toBeDefined()
     expect(dialogSettings).toEqual({ size: "medium", centered: true })
@@ -136,14 +141,16 @@ test("opens the compact setup hub from the main card", async () => {
   try {
     const frame = await detail.waitForFrame((value) => value.includes("novaSpace"))
     expect(frame).toContain("Profile sync")
-    expect(frame).toContain("Set up sync →")
+    expect(frame).toContain("Set up →")
     expect(frame).not.toContain("Standardize this setup before")
     expect(frame).toContain("Skills")
-    expect(frame).toContain("10 ready")
-    expect(frame).toContain("Available skills")
-    expect(frame).toContain("skill-0")
+    expect(frame).not.toContain("Available skills")
+    expect(frame).not.toContain("skill-0")
     expect(frame).not.toContain("SKILL.md")
-    expect(frame).toContain("Open folder ↗")
+    expect(frame).toContain("~/.agents/skills")
+    expect(frame).toContain("Open ↗")
+    expect(frame).toContain("~/.config/opencode/AGENTS.md")
+    expect(frame).toContain("~/.config/opencode/opencode.jsonc")
     expect(frame).not.toContain("Sidebar cards")
     expect(frame).not.toContain("Runtime settings")
     expect(frame).toContain("Esc to close")
@@ -151,57 +158,16 @@ test("opens the compact setup hub from the main card", async () => {
     await detail.mockMouse.click(sync.x + 1, sync.y)
     expect(modal).not.toBe(setupModal)
     expect(dialogSettings).toEqual({ size: "medium", centered: true })
-    const skillsItems = detail.renderer.root.findDescendantById("setup-skills-items-scroll") as ScrollBoxRenderable
+    expect(detail.renderer.root.findDescendantById("setup-skills-items-scroll")).toBeUndefined()
     const modalScroll = detail.renderer.root.findDescendantById("setup-modal-scroll") as ScrollBoxRenderable
-    const syncPanel = detail.renderer.root.findDescendantById("setup-sync-panel") as BoxRenderable
-    const skillsSection = detail.renderer.root.findDescendantById("setup-skills-section") as BoxRenderable
-    const itemsPanel = detail.renderer.root.findDescendantById("setup-skills-items-panel") as BoxRenderable
-    const captured = detail.captureSpans()
-    const backgroundAt = (node: BoxRenderable) => {
-      let x = 0
-      for (const span of captured.lines[node.y + 1]!.spans) {
-        x += span.width
-        if (x > node.x + 2) return span.bg.toInts().slice(0, 3).join(",")
-      }
-      return ""
-    }
-    expect(new Set([backgroundAt(syncPanel), backgroundAt(skillsSection), backgroundAt(itemsPanel)]).size).toBe(3)
-    expect(skillsItems.height).toBe(5)
-    expect(skillsItems.scrollHeight).toBe(10)
-    expect(skillsItems.scrollTop).toBe(0)
-    expect(modalScroll.scrollTop).toBe(0)
-    await detail.mockMouse.scroll(skillsItems.x + 2, skillsItems.y + 1, "down")
-    await detail.flush()
-    expect(skillsItems.scrollTop).toBeGreaterThan(0)
-    expect(modalScroll.scrollTop).toBe(0)
-    const innerScrollTop = skillsItems.scrollTop
-    await detail.mockMouse.scroll(syncPanel.x + 2, syncPanel.y + 1, "down")
-    await detail.flush()
-    expect(modalScroll.scrollTop).toBeGreaterThan(0)
-    expect(skillsItems.scrollTop).toBe(innerScrollTop)
-    modalScroll.scrollTo(0)
-    skillsItems.scrollTo(0)
-    await detail.flush()
-    const firstSkill = detail.renderer.root.findDescendantById("setup-skills-item-0")!
-    await detail.mockMouse.click(firstSkill.x + 1, firstSkill.y)
-    await Bun.sleep(0)
-    expect(opened[0]).toEndWith("skill-0/SKILL.md")
-    skillsItems.scrollTo(10_000)
-    await detail.flush()
-    expect(detail.captureCharFrame()).toContain("skill-9")
+    expect(modalScroll.scrollHeight).toBeLessThanOrEqual(modalScroll.viewport.height)
     const skillsLink = detail.renderer.root.findDescendantById("setup-skills-open")!
     await detail.mockMouse.click(skillsLink.x + 1, skillsLink.y)
     await Bun.sleep(0)
-    expect(opened).toHaveLength(2)
-    modalScroll.scrollTo(10_000)
-    await detail.flush()
-    const bottom = detail.captureCharFrame()
-    expect(bottom).toContain("Subagents")
-    expect(bottom).toContain("OpenCode settings")
-    expect(bottom).toContain("Configured items")
-    expect(bottom).toContain("Plugin · novaspace")
-    expect(bottom).toContain("MCP · gateway")
-    expect(bottom).not.toContain("opencode.jsonc")
+    expect(opened).toEqual(["/Users/example/.agents/skills"])
+    const settingsLink = detail.renderer.root.findDescendantById("setup-plugins-mcp-agents-open")!
+    await detail.mockMouse.click(settingsLink.x + 1, settingsLink.y)
+    expect(opened[1]).toBe("/Users/example/.config/opencode/opencode.jsonc")
     expect(detail.renderer.root.findDescendantById("setup-plugins-mcp-agents-section")).toBeDefined()
     expect(detail.renderer.root.findDescendantById("setup-settings-open")).toBeUndefined()
     expect(Math.abs(dialogBox!.y - (40 - dialogBox!.y - dialogBox!.height))).toBeLessThanOrEqual(1)
@@ -220,15 +186,17 @@ test("opens the compact setup hub from the main card", async () => {
     </box>
   ), { width: 90, height: 40 })
   try {
-    const steps = await onboarding.waitForFrame((value) => value.includes("Choose what travels"))
+    const steps = await onboarding.waitForFrame((value) => value.includes("Shared files sync together"))
     expect(steps).toContain("OpenCode settings")
-    expect(steps).toContain("Terminal preferences")
+    expect(steps).toContain("Appearance & preferences")
     const scroll = onboarding.renderer.root.findDescendantById("setup-sync-onboarding-scroll") as ScrollBoxRenderable
     await Bun.sleep(30)
     await onboarding.flush()
-    scroll.scrollTo(10_000)
+    expect(scroll.scrollHeight).toBeLessThanOrEqual(scroll.viewport.height)
+    expect(onboarding.captureCharFrame()).not.toContain("Create private repository")
+    const filesReview = onboarding.renderer.root.findDescendantById("sync-files-toggle")!
+    await onboarding.mockMouse.click(filesReview.x + 1, filesReview.y)
     await onboarding.flush()
-    expect(onboarding.captureCharFrame()).toContain("Automatic sync")
     const review = onboarding.renderer.root.findDescendantById("setup-sync-review")!
     await onboarding.mockMouse.click(review.x + 1, review.y)
     scroll.scrollTo(0)
@@ -294,7 +262,7 @@ test("renders a usable local setup before optional GitHub sync is configured", a
     />
   ), { width: 38, height: 15 })
   try {
-    const local = await view.waitForFrame((frame) => frame.includes("Local profile") && frame.includes("Set up sync"))
+    const local = await view.waitForFrame((frame) => frame.includes("Local profile") && frame.includes("novaSpace settings"))
     expect(local).toContain("Skills")
     expect(local).toContain("10 ready")
     expect(local).toContain("MCP")
@@ -306,7 +274,7 @@ test("renders a usable local setup before optional GitHub sync is configured", a
     resolveProfile({ login: "example", connection: "connected", sync: "unconfigured" })
     resolveInventory(cachedSetupInventory(ctx))
     const enriched = await view.waitForFrame((frame) => frame.includes("@example"))
-    expect(enriched).toContain("Set up sync")
+    expect(enriched).not.toContain("Set up sync")
     expect(profileLoads).toBe(1)
     expect(inventoryLoads).toBe(1)
   } finally {
@@ -357,7 +325,7 @@ test("reloads the GitHub account when the setup hub is opened", async () => {
   try {
     const initial = await view.waitForFrame((frame) => frame.includes("@before"))
     const rows = initial.split("\n")
-    const manageRow = rows.findIndex((line) => line.includes("Manage settings"))
+    const manageRow = rows.findIndex((line) => line.includes("novaSpace settings"))
     expect(manageRow).toBeGreaterThan(-1)
     // `gh auth switch` can change the account at any time, so opening the hub
     // must re-read it rather than keep the value captured at mount.

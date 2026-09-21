@@ -53,16 +53,20 @@ export class ProfileSync {
       try { return await run() } finally { lease.exec("ROLLBACK") }
     } finally { lease.close() }
   }
-  async configure(input: { repository: string; selected: SyncGroup[]; allowMachinePaths: boolean }) {
+  async configure(input: { repository: string; selected: SyncGroup[]; allowMachinePaths: boolean; create?: boolean }) {
     return this.locked(async () => {
-      validRepository(input.repository)
+      const repository = validRepository(input.repository)
       if (!input.selected.length || input.selected.some((id) => !syncGroups.some((group) => group.id === id))) throw new Error("Select at least one sync group")
       const account = await this.remote.account()
-      await this.remote.verify(input.repository)
+      if (input.create) {
+        if (!this.remote.create) throw new Error("Repository creation is unavailable")
+        await this.remote.create(repository)
+      }
+      await this.remote.verify(repository)
       const old = await this.state()
-      const same = old.repository === input.repository && old.account === account
+      const same = old.repository === repository && old.account === account
       const state: SyncState = {
-        ...initial(), ...input, account, status: "pending",
+        ...initial(), repository, selected: input.selected, allowMachinePaths: input.allowMachinePaths, account, status: "pending",
         base: same ? Object.fromEntries(Object.entries(old.base).filter(([key]) => old.selected.includes(groupFor(key)!) && input.selected.includes(groupFor(key)!))) : {},
         lastSyncedAt: same ? old.lastSyncedAt : undefined,
       }

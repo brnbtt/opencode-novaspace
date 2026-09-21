@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
-import { Card, cardHeader, Divider, metricRow } from "../../ui"
+import { Card, cardHeader, Divider, metricRow, novaMark } from "../../ui"
 import { defineCard, type CardProps } from "../../card"
 import { cachedSetupInventory, loadSetupInventory, setupSections, type SetupInventory, type SetupSection } from "./inventory"
 import { SetupModal, type OpenSetupTarget } from "./modal"
@@ -8,12 +8,11 @@ import type { StandardizationPreflight } from "./preflight"
 import { loadGitHubProfile, githubAccountStamp, type ProfileState } from "./profile"
 import { profileSync, type ProfileSync } from "./sync"
 
-function Layer(props: { row: SetupSection; index: number; revealed: number; ctx: CardProps["ctx"] }) {
-  const active = () => props.index < props.revealed
+function Layer(props: { row: SetupSection; ctx: CardProps["ctx"] }) {
   return (
     <box {...metricRow} height={1} flexShrink={0}>
       <box flexDirection="row" gap={1}>
-        <text selectable={false} fg={active() ? props.ctx.theme.text.feedback.info.base : props.ctx.theme.text.muted}>{props.row.icon}</text>
+        <text selectable={false} fg={props.ctx.theme.text.muted}>{props.row.icon}</text>
         <text selectable={false} fg={props.ctx.theme.text.base}>{props.row.label}</text>
       </box>
       <box flexDirection="row" gap={1}>
@@ -37,8 +36,7 @@ export function SetupCard(props: CardProps & {
   const [inventoryLoading, setInventoryLoading] = createSignal(true)
   const [inventoryError, setInventoryError] = createSignal<string>()
   const [profile, setProfile] = createSignal<ProfileState>({ connection: "signed-out", sync: "unconfigured" })
-  const [revealed, setRevealed] = createSignal(0)
-  let sweep: ReturnType<typeof setInterval> | undefined
+  const [syncHovered, setSyncHovered] = createSignal(false)
   let disposed = false
   let refreshID = 0
   let profileID = 0
@@ -107,7 +105,6 @@ export function SetupCard(props: CardProps & {
     profileAbort?.abort()
     if (accountWatch) clearInterval(accountWatch)
     if (syncWatch) clearInterval(syncWatch)
-    if (sweep) clearInterval(sweep)
   })
 
   const rows = createMemo(() => setupSections(inventory()))
@@ -130,21 +127,6 @@ export function SetupCard(props: CardProps & {
     return colors.muted
   }
 
-  const hover = (active: boolean) => {
-    if (sweep) clearInterval(sweep)
-    if (!active) { setRevealed(0); return }
-    setRevealed(0)
-    sweep = setInterval(() => {
-      setRevealed((value) => {
-        if (value >= rows().length) {
-          if (sweep) clearInterval(sweep)
-          sweep = undefined
-          return value
-        }
-        return value + 1
-      })
-    }, 45)
-  }
   const open = () => {
     if (props.dragging) return
     props.ctx.ui.dialog.show(() => (
@@ -167,21 +149,20 @@ export function SetupCard(props: CardProps & {
     <Card
       theme={props.ctx.theme}
       strength={props.pin ? props.options.pinnedSurfaceStrength : props.options.surfaceStrength}
-      hoverStrength={props.options.hoverStrength}
-      hoverDuration={props.options.hoverDuration}
-      onHoverChange={hover}
+      hoverStrength={0}
       onPress={open}
     >
       <box {...cardHeader} height={1} flexShrink={0}>
         <text selectable={false} flexGrow={1} minWidth={0} wrapMode="none" truncate fg={props.ctx.theme.text.base}><b>{profileName()}</b></text>
-        <box flexDirection="row" flexShrink={0} gap={1}>
+        <box id="setup-sync-status" flexDirection="row" flexShrink={0} gap={1}
+          onMouseOver={() => setSyncHovered(true)} onMouseOut={() => setSyncHovered(false)}>
+          <Show when={syncHovered()}><text selectable={false} fg={props.ctx.theme.text.muted}>{syncLabel()}</text></Show>
           <text selectable={false} fg={syncColor()}>●</text>
-          <text selectable={false} fg={props.ctx.theme.text.muted}>{syncLabel()}</text>
         </box>
       </box>
       <Divider theme={props.ctx.theme} strong />
       <box flexDirection="column">
-        {rows().map((row, index) => <Layer row={row} index={index} revealed={revealed()} ctx={props.ctx} />)}
+        {rows().map((row) => <Layer row={row} ctx={props.ctx} />)}
       </box>
       <Show when={inventoryError()}>{(reason) => (
         <box {...metricRow} height={1} flexShrink={0}>
@@ -192,7 +173,7 @@ export function SetupCard(props: CardProps & {
       )}</Show>
       <Divider theme={props.ctx.theme} strong />
       <box flexDirection="row" justifyContent="space-between" height={1} flexShrink={0}>
-        <text selectable={false} fg={props.ctx.theme.text.feedback.info.base}>Manage settings</text>
+        <text selectable={false} fg={props.ctx.theme.text.feedback.info.base}>{`${novaMark} novaSpace settings`}</text>
         <text selectable={false} fg={props.ctx.theme.text.feedback.info.base}>→</text>
       </box>
     </Card>

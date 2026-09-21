@@ -6,6 +6,7 @@ import { Database } from "bun:sqlite"
 import { ProfileSync } from "../src/cards/setup/sync"
 import { collectFiles, validateSnapshot, type Snapshot, type SyncPaths } from "../src/cards/setup/sync-files"
 import type { SyncRemote } from "../src/cards/setup/sync-remote"
+import { validRepository } from "../src/cards/setup/sync-remote"
 
 const temporary: string[] = []
 afterEach(async () => { for (const path of temporary.splice(0)) await rm(path, { recursive: true, force: true }) })
@@ -30,6 +31,12 @@ function server() {
   return { remote, files: () => files, writes: () => writes, account: (value: string) => { account = value }, offline: (value: boolean) => { fail = value }, race: (value: boolean) => { race = value }, remove: () => { files = {}; revision = undefined } }
 }
 const configure = (engine: ProfileSync) => engine.configure({ repository: "example/profile", selected: ["settings", "terminal", "skills", "instructions"], allowMachinePaths: false })
+
+test("accepts managed GitHub usernames and rejects malformed repository targets", () => {
+  expect(validRepository(" brunobett_microsoft/opencode-profile ")).toBe("brunobett_microsoft/opencode-profile")
+  expect(validRepository("brnbtt/opencode-profile")).toBe("brnbtt/opencode-profile")
+  for (const value of ["owner", "owner/repo/extra", "owner/repo?ref=main", "owner name/repo", "-owner/repo"]) expect(() => validRepository(value)).toThrow("owner/repository")
+})
 
 test("two machines converge, preserve unselected files, restore deletions with backups, and pause on conflicts", async () => {
   const host = server(), a = await machine(host.remote), b = await machine(host.remote)

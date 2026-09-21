@@ -47,13 +47,14 @@ export function SetupActionLink(props: {
   ctx: TuiContext
   label: string
   disabled?: boolean
+  selected?: boolean
   onPress(): void
 }) {
   const [hovered, setHovered] = createSignal(false)
   const actions = useContext(Actions)
   let node: BoxRenderable | undefined
   const run = () => { if (!props.disabled) props.onPress() }
-  const highlighted = () => !props.disabled && (hovered() || actions?.active() === props.id)
+  const highlighted = () => !props.disabled && (props.selected || hovered() || actions?.active() === props.id)
   onMount(() => { if (node) actions?.register({ id: props.id, node, run }) })
   return (
     <box

@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import type { TuiContext } from "../../types"
-import { cardSurface, nativeScrollbar, Panel, useHostDimensions } from "../../ui"
+import { Divider, nativeScrollbar, novaMark, useHostDimensions } from "../../ui"
 import { displaySetupPath, SetupActionLink, SetupActions } from "./action"
 import { profileSync, type ProfileSync, type SyncState } from "./sync"
 import { groupSetupSections, setupSections, type SetupInventory, type SetupTarget } from "./inventory"
@@ -25,87 +25,18 @@ export async function openSetupTarget(target: SetupTarget) {
   if (code !== 0) throw new Error(stderr.trim() || `Could not open ${target.path} with its default application`)
 }
 
-function TargetLink(props: {
-  id: string
-  ctx: TuiContext
-  target: SetupTarget
-  label?: string
-  onPress(): void
-}) {
-  return <SetupActionLink {...props} label={props.label ?? (props.target.kind === "folder" ? "Open folder ↗" : "Open file ↗")} />
-}
-
-type SetupEntry = { label: string; target?: SetupTarget }
-
-function EntryRows(props: {
-  ctx: TuiContext
-  section: string
-  entries: SetupEntry[]
-  open(target: SetupTarget): void
-}) {
-  return (
-    <box flexDirection="column">
-      <For each={props.entries}>{(entry, index) => (
-        <box flexDirection="row" justifyContent="space-between" minWidth={0} height={1}>
-          <text flexGrow={1} minWidth={0} wrapMode="none" truncate fg={props.ctx.theme.text.muted}>
-            {`• ${entry.label}`}
-          </text>
-          <Show when={entry.target}>{(target) => (
-            <TargetLink
-              id={`setup-${props.section}-item-${index()}`}
-              ctx={props.ctx}
-              target={target()}
-              label="Open ↗"
-              onPress={() => props.open(target())}
-            />
-          )}</Show>
-        </box>
-      )}</For>
-    </box>
-  )
-}
-
-function EntryList(props: {
-  ctx: TuiContext
-  section: string
-  title: string
-  entries: SetupEntry[]
-  open(target: SetupTarget): void
-}) {
-  const rows = () => <EntryRows {...props} />
-  const scrolling = () => props.entries.length > 5
-  return (
-    <box
-      id={`setup-${props.section}-items-panel`}
-      flexDirection="column"
-      marginTop={1}
-      paddingLeft={1}
-      paddingRight={1}
-      backgroundColor={cardSurface(props.ctx.theme, scrolling() ? 0.2 : 0.14)}
-    >
-      <box flexDirection="row" justifyContent="space-between" height={1}>
-        <text fg={props.ctx.theme.text.base}><b>{props.title}</b></text>
-        <text fg={props.ctx.theme.text.muted}>{props.entries.length}</text>
-      </box>
-      <Show when={props.entries.length > 0} fallback={<text paddingLeft={1} fg={props.ctx.theme.text.muted}>Nothing configured</text>}>
-        <Show when={scrolling()} fallback={rows()}>
-          <scrollbox
-            id={`setup-${props.section}-items-scroll`}
-            height={5}
-            paddingRight={1}
-            backgroundColor={cardSurface(props.ctx.theme, 0.2)}
-            horizontalScrollbarOptions={{ visible: false }}
-            verticalScrollbarOptions={{ ...nativeScrollbar(props.ctx.theme), position: "absolute", right: 0, top: 0, height: "100%" }}
-            onMouseScroll={(event) => {
-              if (event.scroll?.direction === "up" || event.scroll?.direction === "down") event.stopPropagation()
-            }}
-          >
-            {rows()}
-          </scrollbox>
-        </Show>
-      </Show>
-    </box>
-  )
+export function setupLocations(inventory: SetupInventory) {
+  const locations: { id: string; title: string; target?: SetupTarget }[] = groupSetupSections(setupSections(inventory)).map((group) => {
+    const settings = inventory.settings && group.files.some((file) => file.path === inventory.settings!.path)
+    return {
+      id: group.key,
+      title: settings ? "OpenCode settings" : group.sections.map((section) => section.label).join(" · "),
+      target: settings ? inventory.settings : group.sections[0]?.key === "instructions" && group.files.length === 1 ? group.files[0] : group.target,
+    }
+  })
+  if (inventory.settings && !locations.some((item) => item.target?.path === inventory.settings!.path)) locations.push({ id: "settings", title: "OpenCode settings", target: inventory.settings })
+  if (inventory.terminalSettings) locations.push({ id: "terminal", title: "Appearance & preferences", target: inventory.terminalSettings })
+  return locations.filter((item, index) => !item.target || locations.findIndex((other) => other.target?.path === item.target!.path) === index)
 }
 
 export function SetupModal(props: {
@@ -130,7 +61,6 @@ export function SetupModal(props: {
   onMount(() => {
     void (props.syncEngine ?? profileSync).state().then((value) => { if (!disposed) setSync(value) }).catch(() => {})
     void (props.update?.load ?? loadUpdateState)(props.ctx).then(settle)
-    // A registry round-trip is slower, so it lands after the cached state.
     void (props.update?.check ?? checkForUpdate)(props.ctx).then((value) => {
       if (value.status !== "error") settle(value)
     })
@@ -140,7 +70,6 @@ export function SetupModal(props: {
     const current = update()
     if (current.status !== "outdated" || applying) return
     const { target, version } = current
-    // Once applying, a late load/check must not overwrite the outcome.
     applying = true
     setUpdate({ status: "updating", target, version })
     void (props.update?.apply ?? applyUpdate)(props.ctx, target).then((value) => {
@@ -153,153 +82,58 @@ export function SetupModal(props: {
   }
   const open = (target: SetupTarget) => {
     void (props.openTarget ?? openSetupTarget)(target)
-      .then(() => props.ctx.ui.toast.show({
-        message: `Opened ${displaySetupPath(props.ctx, target.path)}`,
-        variant: "success",
-      }))
-      .catch((error) => props.ctx.ui.toast.show({
-        message: error instanceof Error ? error.message : String(error),
-        variant: "error",
-      }))
+      .catch((error) => props.ctx.ui.toast.show({ message: error instanceof Error ? error.message : String(error), variant: "error" }))
   }
-  const groups = () => groupSetupSections(setupSections(props.inventory))
   const showSetup = () => {
     props.ctx.ui.dialog.show(() => <SetupModal {...props} />)
     props.ctx.ui.dialog.set({ size: "medium", centered: true })
   }
   const openSync = () => {
     props.ctx.ui.dialog.show(() => <SyncOnboardingModal ctx={props.ctx} engine={props.syncEngine} loadPreflight={props.loadPreflight} onBack={showSetup} />)
-    // show() replaces the host dialog and resets its size/centering.
     props.ctx.ui.dialog.set({ size: "medium", centered: true })
   }
-  const settingsGrouped = () => !!props.inventory.settings
-    && groups().some((group) => group.files.some((file) => file.path === props.inventory.settings!.path))
-  const updateTone = () => {
-    const tone = updateSummary(update()).tone
-    if (tone === "error") return props.ctx.theme.text.feedback.error.base
-    if (tone === "info") return props.ctx.theme.text.base
-    return props.ctx.theme.text.muted
-  }
+  const locations = () => setupLocations(props.inventory)
   return (
     <SetupActions ctx={props.ctx}>
-    <box
-      id="sidebar-setup-modal"
-      flexDirection="column"
-      width="100%"
-      height={Math.min(32, Math.max(10, dimensions().height - 6))}
-      paddingLeft={2}
-      paddingRight={2}
-      paddingTop={1}
-      paddingBottom={1}
-      backgroundColor={props.ctx.theme.background.base}
-    >
-      <box flexDirection="row" justifyContent="space-between" flexShrink={0} height={1}>
-        <text fg={props.ctx.theme.text.base}><b>novaSpace · Settings</b></text>
-        <text fg={props.ctx.theme.text.muted}>{installedVersion(update()) ? `v${installedVersion(update())}` : ""}</text>
-      </box>
-      <text flexShrink={0} fg={props.ctx.theme.text.muted}>Your customization, source files and profile.</text>
-
-      <box id="setup-update-panel" flexDirection="row" justifyContent="space-between" flexShrink={0} height={1}>
-        <text selectable={false} flexGrow={1} minWidth={0} wrapMode="none" truncate fg={updateTone()}>{updateSummary(update()).label}</text>
-        <Show when={updateSummary(update()).action}>
-          {(label) => <SetupActionLink id="setup-update-apply" ctx={props.ctx} label={label()} onPress={runUpdate} />}
-        </Show>
-      </box>
-
-      <scrollbox
-        id="setup-modal-scroll"
-        flexGrow={1}
-        minHeight={1}
-        marginTop={1}
-        horizontalScrollbarOptions={{ visible: false }}
-        verticalScrollbarOptions={{ ...nativeScrollbar(props.ctx.theme), position: "absolute", right: 0, top: 0, height: "100%" }}
-      >
-        <box flexDirection="column" gap={1} paddingRight={2}>
-          <Panel id="setup-sync-panel" theme={props.ctx.theme} strength={0.18}>
-            <box flexDirection="row" justifyContent="space-between" height={1}>
-            <text fg={props.ctx.theme.text.base}><b>Profile sync</b></text>
-            <SetupActionLink id="setup-sync-open" ctx={props.ctx} label={sync()?.repository ? "Manage sync →" : "Set up sync →"} onPress={openSync} />
-            </box>
-            <text fg={props.ctx.theme.text.muted} wrapMode="word">{sync()?.repository ? `${sync()?.repository} · ${sync()?.automatic ? "Automatic" : "Manual"}` : "Choose global files to keep in step across machines."}</text>
-          </Panel>
-
-          <Show when={props.loading}>
-            <text fg={props.ctx.theme.text.muted}>Refreshing local setup…</text>
-          </Show>
-          <box flexDirection="column">
-            <For each={groups()}>{(group) => {
-                const groupedSettings = () => group.sections.length > 1
-                  && !!props.inventory.settings
-                  && group.files.some((file) => file.path === props.inventory.settings!.path)
-                const entries = group.sections.flatMap((section) => section.items.map((item) => ({
-                  label: group.sections.length > 1 ? `${section.itemLabel} · ${item.name}` : item.name,
-                  target: item.target,
-                })))
-                const listTitle = group.sections.length > 1 ? "Configured items" : group.sections[0]?.listTitle ?? "Configured items"
-                return (
-                  <Panel
-                    id={`setup-${group.key}-section`}
-                    marginBottom={1}
-                    theme={props.ctx.theme}
-                    strength={groupedSettings() ? 0.14 : 0.1}
-                  >
-                    <Show when={group.sections.length > 1}>
-                      <text fg={props.ctx.theme.text.feedback.info.base}><b>{groupedSettings() ? "OpenCode settings" : "Shared configuration"}</b></text>
-                    </Show>
-                    <For each={group.sections}>{(section) => (
-                      <box flexDirection="row" justifyContent="space-between" height={1} paddingLeft={group.sections.length > 1 ? 1 : 0}>
-                        <text fg={props.ctx.theme.text.base}><b>{`${section.icon} ${section.label}`}</b></text>
-                        <box flexDirection="row" gap={1}>
-                          <text fg={props.ctx.theme.text.base}><b>{section.count}</b></text>
-                          <text fg={section.healthy ? props.ctx.theme.text.feedback.success.base : props.ctx.theme.text.muted}>{section.status}</text>
-                        </box>
-                      </box>
-                    )}</For>
-                    <box flexDirection="row" justifyContent="space-between" minWidth={0}>
-                      <text flexGrow={1} minWidth={0} wrapMode="none" truncate fg={props.ctx.theme.text.muted}>
-                        {group.target ? displaySetupPath(props.ctx, group.target.path) : group.sections[0]?.empty}
-                      </text>
-                      <Show when={group.target}>{(target) => (
-                        <TargetLink id={`setup-${group.key}-open`} ctx={props.ctx} target={target()} onPress={() => open(target())} />
-                      )}</Show>
-                    </box>
-                    <EntryList ctx={props.ctx} section={group.key} title={listTitle} entries={entries} open={open} />
-                  </Panel>
-                )
-            }}</For>
+      <box id="sidebar-setup-modal" flexDirection="column" width="100%"
+        height={Math.min(9 + locations().length * 3, Math.max(10, dimensions().height - 6))}
+        paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1} backgroundColor={props.ctx.theme.background.base}>
+        <box flexDirection="row" justifyContent="space-between" flexShrink={0} height={1}>
+          <box flexDirection="row" gap={1}>
+            <text fg={props.ctx.theme.text.feedback.info.base}>{novaMark}</text>
+            <text fg={props.ctx.theme.text.base}><b>novaSpace settings</b></text>
           </box>
-
-          <Show when={!settingsGrouped()}>
-            <box flexDirection="column" paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1} backgroundColor={cardSurface(props.ctx.theme, 0.16)}>
-              <text fg={props.ctx.theme.text.base}><b>OpenCode settings</b></text>
-              <Show when={props.inventory.settings} fallback={<text fg={props.ctx.theme.text.muted}>No settings file detected</text>}>
-                {(target) => (
-                  <box flexDirection="row" justifyContent="space-between" minWidth={0}>
-                    <text flexGrow={1} minWidth={0} wrapMode="none" truncate fg={props.ctx.theme.text.muted}>{displaySetupPath(props.ctx, target().path)}</text>
-                    <TargetLink id="setup-settings-open" ctx={props.ctx} target={target()} onPress={() => open(target())} />
-                  </box>
-                )}
-              </Show>
-            </box>
-          </Show>
-          <Show when={props.inventory.terminalSettings}>{(target) => (
-            <Panel theme={props.ctx.theme} strength={0.1}>
-              <text fg={props.ctx.theme.text.base}><b>Terminal preferences</b></text>
-              <text fg={props.ctx.theme.text.muted} wrapMode="word">Theme, keybindings, terminal behavior and novaSpace options.</text>
-              <box flexDirection="row" justifyContent="space-between" minWidth={0}>
-                <text flexGrow={1} minWidth={0} wrapMode="none" truncate fg={props.ctx.theme.text.muted}>{displaySetupPath(props.ctx, target().path)}</text>
-                <TargetLink id="setup-terminal-open" ctx={props.ctx} target={target()} onPress={() => open(target())} />
-              </box>
-            </Panel>
-          )}</Show>
+          <text fg={props.ctx.theme.text.muted}>{installedVersion(update()) ? `v${installedVersion(update())}` : ""}</text>
         </box>
-      </scrollbox>
-
-      <box flexDirection="row" justifyContent="space-between" flexShrink={0} height={1} marginTop={1}>
-        <text fg={props.ctx.theme.text.muted}>Tab · Enter · Esc to close</text>
-        <SetupActionLink id="setup-close" ctx={props.ctx} label="Close" onPress={() => props.ctx.ui.dialog.clear()} />
+        <box id="setup-update-panel" flexDirection="row" justifyContent="space-between" flexShrink={0} height={1}>
+          <text selectable={false} flexGrow={1} minWidth={0} wrapMode="none" truncate fg={update().status === "error" ? props.ctx.theme.text.feedback.error.base : props.ctx.theme.text.muted}>{updateSummary(update()).label}</text>
+          <Show when={updateSummary(update()).action}>{(label) => <SetupActionLink id="setup-update-apply" ctx={props.ctx} label={label()} onPress={runUpdate} />}</Show>
+        </box>
+        <box id="setup-sync-panel" flexDirection="row" justifyContent="space-between" flexShrink={0} height={1} marginTop={1}>
+          <text fg={props.ctx.theme.text.base}>Profile sync</text>
+          <SetupActionLink id="setup-sync-open" ctx={props.ctx} label={sync()?.repository ? "Manage →" : "Set up →"} onPress={openSync} />
+        </box>
+        <Divider theme={props.ctx.theme} strong />
+        <scrollbox id="setup-modal-scroll" flexGrow={1} minHeight={1}
+          horizontalScrollbarOptions={{ visible: false }}
+          verticalScrollbarOptions={{ ...nativeScrollbar(props.ctx.theme), position: "absolute", right: 0, top: 0, height: "100%" }}>
+          <box flexDirection="column" paddingRight={2}>
+            <For each={locations()}>{(item) => (
+              <box id={`setup-${item.id}-section`} flexDirection="column" marginBottom={1}>
+                <box flexDirection="row" justifyContent="space-between" height={1}>
+                  <text fg={props.ctx.theme.text.base}><b>{item.title}</b></text>
+                  <Show when={item.target}>{(target) => <SetupActionLink id={`setup-${item.id}-open`} ctx={props.ctx} label="Open ↗" onPress={() => open(target())} />}</Show>
+                </box>
+                <text fg={props.ctx.theme.text.muted} minWidth={0} wrapMode="none" truncate>{item.target ? displaySetupPath(props.ctx, item.target.path) : props.loading ? "Finding source…" : "No local source"}</text>
+              </box>
+            )}</For>
+          </box>
+        </scrollbox>
+        <box flexDirection="row" justifyContent="space-between" flexShrink={0} height={1} marginTop={1}>
+          <text fg={props.ctx.theme.text.muted}>Tab · Enter · Esc to close</text>
+          <SetupActionLink id="setup-close" ctx={props.ctx} label="Close" onPress={() => props.ctx.ui.dialog.clear()} />
+        </box>
       </box>
-    </box>
     </SetupActions>
   )
 }

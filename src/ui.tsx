@@ -5,6 +5,8 @@ import { createEffect, createSignal, onCleanup, onMount, untrack, Show, type JSX
 import type { Theme, TuiContext } from "./types"
 import type { CardDragBinding } from "./drag"
 
+export const novaMark = "✧"
+
 function mix(from: RGBA, to: RGBA, amount: number) {
   const [fr, fg, fb] = from.toInts()
   const [tr, tg, tb] = to.toInts()
@@ -103,6 +105,7 @@ export function Card(props: {
   const [hovered, setHovered] = createSignal(false)
   const [progress, setProgress] = createSignal(0)
   createEffect(() => {
+    if (props.hoverStrength === 0) { setProgress(0); return }
     const target = hovered() ? 1 : 0
     const initial = untrack(progress)
     if (initial === target) return

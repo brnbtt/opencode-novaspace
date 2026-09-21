@@ -17,8 +17,11 @@ for (const mode of ["dark", "light"]) test(`sync UI selects whole-file groups, c
   await writeFile(join(paths.config, "opencode.jsonc"), '{"model":"example/model","plugins":["opencode-novaspace"]}')
   await writeFile(join(paths.config, "cli.json"), '{"theme":{"name":"example"}}')
   let remote: Snapshot = {}, revision: string | undefined
+  const created: string[] = []
+  let denyCreate = mode === "dark"
   const engine = new ProfileSync(paths, {
-    async account() { return "example" }, async verify(repo) { expect(repo).toBe("example/opencode-profile") },
+    async account() { return "brunobett_microsoft" }, async verify(repo) { expect(repo).toBe("brunobett_microsoft/opencode-profile") },
+    async create(repo) { created.push(repo); if (denyCreate) throw new Error("GitHub denied repository creation") },
     async read() { return { files: { ...remote }, revision } },
     async write(_repo, files) { remote = { ...files }; return revision = "saved" },
   })
@@ -28,28 +31,44 @@ for (const mode of ["dark", "light"]) test(`sync UI selects whole-file groups, c
   ctx.keymap = { layer: (value) => { layer = value } }
   const view = await testRender(() => <SyncOnboardingModal ctx={ctx} engine={engine} onBack={() => {}} />, { width: 76, height: 40 })
   const scroll = () => view.renderer.root.findDescendantById("setup-sync-onboarding-scroll") as ScrollBoxRenderable
+  const ready = () => view.waitForFrame(async (frame) => {
+    if (!frame.includes("Working…")) return true
+    await Bun.sleep(5)
+    return false
+  }, { maxPasses: 400 })
   const click = async (id: string) => {
     // Disk state can settle before the modal's promise chain clears `busy`.
     // Wait for the UI, not a machine-speed-dependent delay between actions.
-    await view.waitForFrame((frame) => !frame.includes("Working…"))
+    await ready()
     const node = view.renderer.root.findDescendantById(id)!
     scroll().scrollTo(scroll().scrollTop + node.y - scroll().viewport.y - 2)
     await view.flush()
     await view.mockMouse.click(node.x + 1, node.y)
-    await view.waitForFrame((frame) => !frame.includes("Working…"))
+    await ready()
   }
   try {
-    await Bun.sleep(40); await view.flush()
-    expect(view.captureCharFrame()).toContain("Choose what travels")
-    expect(view.captureCharFrame()).toContain("╭")
-    // Tab + Enter activates the first group checkbox, then restores it.
-    layer!().commands.find((command) => command.bind === "tab")!.run()
+    await view.waitForFrame((frame) => frame.includes("☑ OpenCode settings") && frame.includes("2 files selected"))
+    expect(view.captureCharFrame()).toContain("✧ Profile sync")
+    expect(scroll().scrollHeight).toBeLessThanOrEqual(scroll().viewport.height)
+    // Navigate past the three tabs to the first group checkbox.
+    for (let index = 0; index < 4; index++) layer!().commands.find((command) => command.bind === "tab")!.run()
     layer!().commands.find((command) => command.bind === "return")!.run()
     await view.flush()
     expect(view.captureCharFrame()).toContain("☐ OpenCode settings")
     layer!().commands.find((command) => command.bind === "return")!.run()
     await click("sync-group-terminal")
-    await click("sync-connect")
+    await click("sync-tab-repository")
+    expect(view.captureCharFrame()).toContain("brunobett_microsoft/opencode-profile")
+    expect(view.captureCharFrame()).not.toContain("☑ OpenCode settings")
+    if (mode === "dark") {
+      await click("sync-create")
+      expect(view.captureCharFrame()).toContain("GitHub denied repository creation")
+      const notice = view.renderer.root.findDescendantById("sync-error")!
+      expect(notice.y).toBeLessThan(scroll().y)
+      denyCreate = false
+      await click("sync-create")
+      expect(created).toEqual(["brunobett_microsoft/opencode-profile", "brunobett_microsoft/opencode-profile"])
+    } else await click("sync-connect")
     expect((await engine.state()).selected).not.toContain("terminal")
     await click("sync-now")
     expect((await engine.state()).status).toBe("synced")

@@ -4,6 +4,7 @@ import { validateSnapshot } from "./sync-files"
 export type RemoteSnapshot = { files: Snapshot; revision?: string }
 export interface SyncRemote {
   account(): Promise<string>
+  create?(repository: string): Promise<void>
   verify(repository: string): Promise<void>
   read(repository: string): Promise<RemoteSnapshot>
   write(repository: string, files: Snapshot, revision?: string): Promise<string>
@@ -21,11 +22,17 @@ export async function gh(args: string[], input?: unknown) {
   } finally { clearTimeout(timer) }
 }
 export function validRepository(repository: string) {
-  if (!/^[A-Za-z0-9-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw new Error("Use an owner/repository name")
-  return repository
+  const value = repository.trim()
+  // Enterprise-managed GitHub usernames include an underscore and enterprise
+  // suffix (for example, person_company).
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*\/[A-Za-z0-9_.-]+$/.test(value)) throw new Error("Use an owner/repository name")
+  return value
 }
 export const githubRemote: SyncRemote = {
   account: () => gh(["api", "user", "--jq", ".login"]),
+  async create(repository) {
+    await gh(["repo", "create", validRepository(repository), "--private", "--description", "Personal OpenCode profile synced by novaSpace"])
+  },
   async verify(repository) {
     validRepository(repository)
     const result = JSON.parse(await gh(["api", `repos/${repository}`]))

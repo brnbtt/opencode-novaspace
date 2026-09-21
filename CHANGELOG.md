@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.2
+
+- Fix private-repository creation for enterprise-managed GitHub usernames such as
+  `person_company`. Trim repository input before validating and connecting.
+- Simplify settings to file/folder links and remove individual item lists and
+  nested scrolling.
+- Split profile sync into compact Files, Repository and Sync views. Keep detailed
+  file review separate and show errors near the header.
+- Add a small theme-aware `✧` mark and rename the main action to **novaSpace settings**.
+- Reveal the sync status label only when its dot is hovered. Remove the main
+  card's icon sweep and whole-card hover animation.
+
 ## 0.2.1
 
 The first published release of the changes below. The `v0.2.0` workflow stopped

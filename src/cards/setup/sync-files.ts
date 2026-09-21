@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto"
 
 export const syncGroups = [
   { id: "settings", label: "OpenCode settings", detail: "Default model, providers, plugins, MCP, permissions and inline agents · whole opencode.json(c)" },
-  { id: "terminal", label: "Terminal preferences", detail: "Theme, keybindings, terminal preferences and novaSpace options · cli.json and themes/" },
+  { id: "terminal", label: "Appearance & preferences", detail: "Theme, keybindings, terminal preferences and novaSpace options · cli.json and themes/" },
   { id: "skills", label: "Skills", detail: "Global skills from OpenCode, .agents and .claude folders" },
   { id: "instructions", label: "Instructions", detail: "Global AGENTS.md" },
   { id: "agents", label: "Agents & commands", detail: "Global agent and command files" },
