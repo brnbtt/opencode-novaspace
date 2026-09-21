@@ -56,6 +56,14 @@ state and reports `● Set up sync`; it never blocks local setup discovery. The
 profile model also reserves `syncing`, `synced`, `pending`, and `error` states
 for the planned settings synchronization feature.
 
+The signed-in account can change at any time, so the card re-reads it when the
+setup hub opens and whenever `gh` rewrites its configuration. It watches that
+file's change stamp rather than polling the GitHub API, so an idle sidebar
+spends no API calls and starts no processes.
+
+The hub also reports novaSpace's own version and, for a managed package
+install, offers an update when OpenCode reports one. See "Packaging".
+
 ## Arrange cards
 
 - Drag the small `⠿` grip to the left of a card's title to rearrange it. A highlighted line

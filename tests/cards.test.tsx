@@ -358,6 +358,44 @@ test("reloads the GitHub account when the setup hub is opened", async () => {
   }
 })
 
+test("picks up a GitHub account switch without reopening the card", async () => {
+  const ctx = context()
+  const options = resolveOptions(ctx.options)
+  const logins = ["before", "after"]
+  let profileLoads = 0
+  // `gh auth switch` rewrites gh's config; the card watches that stamp.
+  let stamp = 1
+  const view = await testRender(() => (
+    <SetupCard
+      ctx={ctx}
+      sessionID="session"
+      options={options}
+      pin="top"
+      accountPollMs={10}
+      accountStamp={async () => stamp}
+      loadProfile={async () => ({ login: logins[Math.min(profileLoads++, logins.length - 1)], connection: "connected", sync: "unconfigured" })}
+      loadInventory={async () => cachedSetupInventory(ctx)}
+    />
+  ), { width: 38, height: 15 })
+  try {
+    await Bun.sleep(60)
+    await view.flush()
+    expect(view.captureCharFrame()).toContain("@before")
+    // Polling a change stamp must not re-run the account lookup every tick.
+    expect(profileLoads).toBe(1)
+
+    stamp = 2
+    await Bun.sleep(80)
+    await view.flush()
+    const switched = view.captureCharFrame()
+    expect(switched).toContain("@after")
+    expect(switched).not.toContain("@before")
+    expect(profileLoads).toBe(2)
+  } finally {
+    view.renderer.destroy()
+  }
+})
+
 test("offers an update only for a managed package install", async () => {
   const ctx = context()
   const toasts: string[] = []

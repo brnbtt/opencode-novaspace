@@ -5,7 +5,7 @@ import { defineCard, type CardProps } from "../../card"
 import { cachedSetupInventory, loadSetupInventory, setupSections, type SetupInventory, type SetupSection } from "./inventory"
 import { SetupModal, type OpenSetupTarget } from "./modal"
 import type { StandardizationPreflight } from "./preflight"
-import { loadGitHubProfile, type ProfileState } from "./profile"
+import { loadGitHubProfile, githubAccountStamp, type ProfileState } from "./profile"
 
 function Layer(props: { row: SetupSection; index: number; revealed: number; ctx: CardProps["ctx"] }) {
   const active = () => props.index < props.revealed
@@ -25,6 +25,8 @@ function Layer(props: { row: SetupSection; index: number; revealed: number; ctx:
 
 export function SetupCard(props: CardProps & {
   loadProfile?: (signal?: AbortSignal) => Promise<ProfileState>
+  accountStamp?: () => Promise<number | undefined>
+  accountPollMs?: number
   loadInventory?: (ctx: CardProps["ctx"]) => Promise<SetupInventory>
   loadPreflight?: (ctx: CardProps["ctx"]) => Promise<StandardizationPreflight>
   openTarget?: OpenSetupTarget
@@ -39,6 +41,8 @@ export function SetupCard(props: CardProps & {
   let refreshID = 0
   let profileID = 0
   let profileAbort: AbortController | undefined
+  let accountStamp: number | undefined
+  let accountWatch: ReturnType<typeof setInterval> | undefined
 
   /**
    * The signed-in account can change at any time (`gh auth switch`), so this
@@ -78,10 +82,22 @@ export function SetupCard(props: CardProps & {
   onMount(() => {
     void refreshInventory()
     void refreshProfile()
+    const stamp = props.accountStamp ?? githubAccountStamp
+    void stamp().then((value) => { accountStamp = value })
+    // `gh auth switch` rewrites gh's config, so a periodic stat notices an
+    // account change without spawning gh or spending an API call each tick.
+    accountWatch = setInterval(() => {
+      void stamp().then((value) => {
+        if (disposed || value === accountStamp) return
+        accountStamp = value
+        void refreshProfile()
+      })
+    }, props.accountPollMs ?? 5_000)
   })
   onCleanup(() => {
     disposed = true
     profileAbort?.abort()
+    if (accountWatch) clearInterval(accountWatch)
     if (sweep) clearInterval(sweep)
   })
 
