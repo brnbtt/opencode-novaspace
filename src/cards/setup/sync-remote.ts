@@ -49,14 +49,14 @@ export const githubRemote: SyncRemote = {
     const file = JSON.parse(out)
     if (file.type !== "file" || file.encoding !== "base64" || file.size > 1_000_000) throw new Error("Unsupported remote profile file")
     const data = JSON.parse(Buffer.from(file.content, "base64").toString("utf8"))
-    if (data.version !== 1) throw new Error("Unsupported profile format")
+    if (data.version !== 1 && data.version !== 2) throw new Error("Unsupported profile format; update novaSpace")
     return { files: validateSnapshot(data.files), revision: file.sha }
   },
   async write(repository, files, revision) {
     validRepository(repository)
     const result = JSON.parse(await gh(["api", "--method", "PUT", `repos/${repository}/contents/.novaspace/profile.json`, "--input", "-"], {
       message: "Sync OpenCode profile with novaSpace",
-      content: Buffer.from(JSON.stringify({ version: 1, files }, null, 2) + "\n").toString("base64"),
+      content: Buffer.from(JSON.stringify({ version: 2, files }, null, 2) + "\n").toString("base64"),
       ...(revision ? { sha: revision } : {}),
     }))
     return result.content.sha

@@ -1,7 +1,8 @@
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { Database } from "bun:sqlite"
-import { applyFiles, collectFiles, equalSnapshots, groupFor, mergeSnapshots, reviewSnapshot, syncGroups, syncPaths, validateSnapshot, type Snapshot, type SyncGroup, type SyncPaths } from "./sync-files"
+import { applyFiles, collectFiles, equalSnapshots, groupFor, syncGroups, syncPaths, validateSnapshot, type LocalEntry, type Snapshot, type SyncGroup, type SyncPaths } from "./sync-files"
+import { materializeProfile, mergeProfiles, prepareProfile } from "./sync-prepare"
 import { githubRemote, validRepository, type SyncRemote } from "./sync-remote"
 
 export type SyncState = {
@@ -10,7 +11,7 @@ export type SyncState = {
   account?: string
   selected: SyncGroup[]
   automatic: boolean
-  allowMachinePaths: boolean
+  keptLocal?: LocalEntry[]
   base: Snapshot
   status: "unconfigured" | "pending" | "syncing" | "synced" | "conflict" | "error" | "paused"
   lastSyncedAt?: number
@@ -18,7 +19,7 @@ export type SyncState = {
   message?: string
   conflicts?: string[]
 }
-const initial = (): SyncState => ({ version: 1, selected: ["settings", "terminal", "skills", "instructions", "agents"], automatic: false, allowMachinePaths: false, base: {}, status: "unconfigured" })
+const initial = (): SyncState => ({ version: 1, selected: ["settings", "terminal", "skills", "instructions", "agents"], automatic: false, base: {}, status: "unconfigured" })
 
 export class ProfileSync {
   constructor(readonly paths: SyncPaths = syncPaths(), readonly remote: SyncRemote = githubRemote) {}
@@ -53,7 +54,7 @@ export class ProfileSync {
       try { return await run() } finally { lease.exec("ROLLBACK") }
     } finally { lease.close() }
   }
-  async configure(input: { repository: string; selected: SyncGroup[]; allowMachinePaths: boolean; create?: boolean }) {
+  async configure(input: { repository: string; selected: SyncGroup[]; create?: boolean; allowMachinePaths?: boolean }) {
     return this.locked(async () => {
       const repository = validRepository(input.repository)
       if (!input.selected.length || input.selected.some((id) => !syncGroups.some((group) => group.id === id))) throw new Error("Select at least one sync group")
@@ -66,7 +67,7 @@ export class ProfileSync {
       const old = await this.state()
       const same = old.repository === repository && old.account === account
       const state: SyncState = {
-        ...initial(), repository, selected: input.selected, allowMachinePaths: input.allowMachinePaths, account, status: "pending",
+        ...initial(), repository, selected: input.selected, account, status: "pending",
         base: same ? Object.fromEntries(Object.entries(old.base).filter(([key]) => old.selected.includes(groupFor(key)!) && input.selected.includes(groupFor(key)!))) : {},
         lastSyncedAt: same ? old.lastSyncedAt : undefined,
       }
@@ -79,7 +80,7 @@ export class ProfileSync {
       const state = await this.state()
       if (!state.repository || !state.lastSyncedAt) throw new Error("Complete a sync before enabling automatic sync")
       state.automatic = enabled
-      state.status = enabled ? "pending" : "paused"
+      state.status = enabled ? state.status === "synced" ? "synced" : "pending" : "paused"
       state.message = undefined
       await this.save(state)
       return state
@@ -89,8 +90,10 @@ export class ProfileSync {
     return this.locked(async () => { await this.save(initial()); return initial() })
   }
   async preview(selected: SyncGroup[]) {
-    const files = await collectFiles(this.paths, selected)
-    return { files: Object.keys(files), ...reviewSnapshot(files) }
+    const keptLocal: LocalEntry[] = []
+    const raw = await collectFiles(this.paths, selected, keptLocal)
+    const profile = prepareProfile(raw, keptLocal)
+    return { files: Object.keys(profile.files), keptLocal: profile.keptLocal }
   }
   async sync(resolution?: "local" | "remote", automatic = false): Promise<SyncState> {
     return this.locked(async () => {
@@ -105,10 +108,18 @@ export class ProfileSync {
       try {
         if (await this.remote.account() !== state.account) throw new Error(`Sync paused: switch GitHub back to @${state.account}, or reconnect this profile`)
         await this.remote.verify(state.repository)
-        const local = await collectFiles(this.paths, state.selected)
+        const keptLocal: LocalEntry[] = []
+        const raw = await collectFiles(this.paths, state.selected, keptLocal)
+        const local = prepareProfile(raw, keptLocal)
         const remote = await this.remote.read(state.repository)
         if (!remote.revision && Object.keys(state.base).length) throw new Error("The remote profile disappeared. Reconnect after reviewing the repository; local files were kept.")
-        const { merged, conflicts } = mergeSnapshots(state.base, local, remote.files, state.selected)
+        const base = prepareProfile(state.base).files
+        const remoteProfile = prepareProfile(remote.files)
+        // A device only prepares the groups it selected. Preserve other groups
+        // byte-for-byte, including legacy snapshots owned by another device.
+        for (const [key, value] of Object.entries(remote.files)) if (!state.selected.includes(groupFor(key)!)) remoteProfile.files[key] = value
+        const { merged, conflicts } = mergeProfiles(base, local, remoteProfile, state.selected, resolution)
+        state.keptLocal = local.keptLocal
         if (conflicts.length && !resolution) {
           state.status = "conflict"
           state.conflicts = conflicts
@@ -116,24 +127,16 @@ export class ProfileSync {
           await this.save(state)
           return state
         }
-        for (const key of conflicts) {
-          const value = resolution === "local" ? local[key] : remote.files[key]
-          if (value === undefined) delete merged[key]
-          else merged[key] = value
-        }
         validateSnapshot(merged)
         const selectedFiles = Object.fromEntries(Object.entries(merged).filter(([key]) => state.selected.includes(groupFor(key)!)))
-        const review = reviewSnapshot(selectedFiles)
-        if (review.blockers.length) throw new Error(`Possible literal credentials in: ${review.blockers.join(", ")}. Use environment references before syncing.`)
-        if (review.warnings.length && !state.allowMachinePaths) throw new Error(`Machine-specific paths in: ${review.warnings.join(", ")}. Review files and explicitly allow them, or make them portable.`)
-        if (!equalSnapshots(await collectFiles(this.paths, state.selected), local)) throw new Error("Local files changed during sync; retry")
+        if (!equalSnapshots(await collectFiles(this.paths, state.selected, []), raw)) throw new Error("Local files changed during sync; retry")
         if (!equalSnapshots(merged, remote.files)) await this.remote.write(state.repository, merged, remote.revision)
-        await applyFiles(this.paths, local, merged, state.selected)
+        await applyFiles(this.paths, raw, materializeProfile(raw, local, merged, state.selected), state.selected)
         state.base = selectedFiles
         state.status = "synced"
         state.conflicts = []
         state.lastSyncedAt = Date.now()
-        state.message = `${Object.keys(selectedFiles).length} files synced. Restart OpenCode when restored plugins or server settings require it.`
+        state.message = `${Object.keys(selectedFiles).length} files synced${state.keptLocal.length ? ` · ${state.keptLocal.length} machine-local entries preserved` : ""}.`
       } catch (error) {
         state.status = "error"
         state.message = error instanceof Error ? error.message : String(error)

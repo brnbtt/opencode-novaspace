@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0
+
+- Prepare a portable sync copy automatically, without moving files, rewriting
+  local paths, replacing links or requiring a standardization review.
+- Preserve machine-specific configuration and credentials locally while syncing
+  portable settings from the same JSON/JSONC file. Keep original comments and
+  formatting when applying portable setting changes.
+- Keep linked sources and machine-dependent file bundles local automatically.
+  Show their names in optional details instead of asking for approval.
+- Connect, perform the first sync and enable automatic sync in one flow. Preserve
+  an existing connection's paused preference when changing its selection.
+- Stage all restore writes and backups before applying changes, roll back an
+  interrupted apply when possible, and preserve concurrent user edits.
+- Use profile format 2. Older novaSpace versions stop at the format check before
+  applying a profile written by this release; update all syncing machines.
+
 ## 0.2.2
 
 - Fix private-repository creation for enterprise-managed GitHub usernames such as

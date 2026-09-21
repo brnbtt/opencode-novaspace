@@ -16,7 +16,8 @@ export type Snapshot = Record<string, string>
 // The optional x: prefix preserves the executable flag without copying ownership
 // or broad filesystem permissions between machines.
 export function decodeFile(value: string) { return Buffer.from(value.startsWith("x:") ? value.slice(2) : value, "base64") }
-function encodeFile(value: Buffer, mode: number) { return `${mode & 0o111 ? "x:" : ""}${value.toString("base64")}` }
+export function encodeFile(value: Buffer, mode: number) { return `${mode & 0o111 ? "x:" : ""}${value.toString("base64")}` }
+export type LocalEntry = { path: string; reason: string }
 export type SyncPaths = { home: string; config: string; state: string }
 export function syncPaths(): SyncPaths {
   const home = process.env.HOME ?? homedir()
@@ -91,13 +92,22 @@ export function reviewSnapshot(files: Snapshot) {
   }
   return { blockers, warnings }
 }
-export async function collectFiles(paths: SyncPaths, selected: readonly SyncGroup[]): Promise<Snapshot> {
+export async function collectFiles(paths: SyncPaths, selected: readonly SyncGroup[], keptLocal?: LocalEntry[]): Promise<Snapshot> {
   const result: Snapshot = {}
   let bytes = 0
   const visit = async (key: string, path: string) => {
     const info = await lstat(path).catch((error) => { if (error.code !== "ENOENT") throw error })
     if (!info) return
-    await regularPath(path, paths)
+    if (keptLocal && info.isFile() && info.nlink > 1) {
+      keptLocal.push({ path: key, reason: "Linked source stays on this machine" })
+      return
+    }
+    try { await regularPath(path, paths) }
+    catch (error) {
+      if (!keptLocal || !(error instanceof Error) || !error.message.startsWith("Symlink needs local review")) throw error
+      keptLocal.push({ path: key, reason: "Linked source stays on this machine" })
+      return
+    }
     if (info.isDirectory()) {
       for (const item of (await readdir(path)).sort()) {
         if (ignored.has(item) || item.startsWith(".env.") || temporaryFile(item)) continue
@@ -105,7 +115,11 @@ export async function collectFiles(paths: SyncPaths, selected: readonly SyncGrou
       }
     } else if (info.isFile()) {
       if (!groupFor(key)) throw new Error(`Unsupported profile file: ${key}`)
-      if (info.size > 500_000) throw new Error(`Profile file too large: ${key}`)
+      if (info.size > 500_000) {
+        if (!keptLocal) throw new Error(`Profile file too large: ${key}`)
+        keptLocal.push({ path: key, reason: "Large file stays on this machine" })
+        return
+      }
       result[key] = encodeFile(await readFile(path), info.mode)
       bytes += result[key]!.length
       if (bytes > 700_000 || Object.keys(result).length > 1000) throw new Error("Profile exceeds the 500 KB / 1,000 file limit")
@@ -135,29 +149,57 @@ export function equalSnapshots(a: Snapshot, b: Snapshot) {
   return Object.keys(a).length === Object.keys(b).length && Object.keys(a).every((key) => a[key] === b[key])
 }
 export async function applyFiles(paths: SyncPaths, before: Snapshot, after: Snapshot, selected: readonly SyncGroup[]) {
-  if (!equalSnapshots(await collectFiles(paths, selected), before)) throw new Error("Local files changed during sync; retry to include the latest edits")
+  if (!equalSnapshots(await collectFiles(paths, selected, []), before)) throw new Error("Local files changed during sync; retry to include the latest edits")
   const stamp = new Date().toISOString().replace(/[:.]/g, "-")
-  for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
-    if (!selected.includes(groupFor(key)!) || before[key] === after[key]) continue
-    const path = pathFor(key, paths)
+  const changes = [...new Set([...Object.keys(before), ...Object.keys(after)])]
+    .filter((key) => selected.includes(groupFor(key)!) && before[key] !== after[key])
+    .map((key) => ({ key, path: pathFor(key, paths), before: before[key], after: after[key], mode: 0o600, temp: "", committed: false }))
+  const current = async (path: string) => {
     await regularPath(path, paths)
-    const current = await readFile(path).catch((error) => { if (error.code !== "ENOENT") throw error })
     const info = await lstat(path).catch((error) => { if (error.code !== "ENOENT") throw error })
-    if ((current ? encodeFile(current, info?.mode ?? 0o600) : undefined) !== before[key]) throw new Error(`File changed during sync: ${key}`)
-    if (current) {
-      const backup = join(paths.state, "backups", stamp, key)
-      await mkdir(dirname(backup), { recursive: true, mode: 0o700 })
-      await writeFile(backup, current, { mode: 0o600, flag: "wx" })
+    return info ? { content: encodeFile(await readFile(path), info.mode), mode: info.mode & 0o777 } : undefined
+  }
+  try {
+    // Finish every validation, backup and staged write before changing any live file.
+    for (const change of changes) {
+      const existing = await current(change.path)
+      if (existing?.content !== change.before) throw new Error(`File changed during sync: ${change.key}`)
+      change.mode = existing?.mode ?? 0o600
+      if (change.before !== undefined) {
+        const backup = join(paths.state, "backups", stamp, change.key)
+        await mkdir(dirname(backup), { recursive: true, mode: 0o700 })
+        await writeFile(backup, decodeFile(change.before), { mode: 0o600, flag: "wx" })
+      }
+      if (change.after !== undefined) {
+        await mkdir(dirname(change.path), { recursive: true })
+        change.temp = `${change.path}.novaspace-${randomUUID()}.tmp`
+        const mode = (change.mode & ~0o111) | (change.after.startsWith("x:") ? 0o100 : 0)
+        await writeFile(change.temp, decodeFile(change.after), { mode, flag: "wx" })
+      }
     }
-    if (after[key] === undefined) await unlink(path)
-    else {
-      await mkdir(dirname(path), { recursive: true })
-      const temp = `${path}.novaspace-${randomUUID()}.tmp`
-      const mode = ((info?.mode ?? 0o600) & 0o777 & ~0o111) | (after[key]!.startsWith("x:") ? 0o100 : 0)
+    for (const change of changes) {
+      if ((await current(change.path))?.content !== change.before) throw new Error(`File changed during sync: ${change.key}`)
+      if (change.after === undefined) await unlink(change.path)
+      else await rename(change.temp, change.path)
+      change.committed = true
+    }
+  } catch (error) {
+    // Roll back our writes, but never overwrite a concurrent edit by the user.
+    const failed: string[] = []
+    for (const change of changes.filter((item) => item.committed).reverse()) {
       try {
-        await writeFile(temp, decodeFile(after[key]!), { mode, flag: "wx" })
-        await rename(temp, path)
-      } finally { await unlink(temp).catch((error) => { if (error.code !== "ENOENT") throw error }) }
+        if ((await current(change.path))?.content !== change.after) continue
+        if (change.before === undefined) await unlink(change.path)
+        else {
+          change.temp = `${change.path}.novaspace-${randomUUID()}.tmp`
+          await writeFile(change.temp, decodeFile(change.before), { mode: change.mode, flag: "wx" })
+          await rename(change.temp, change.path)
+        }
+      } catch { failed.push(change.key) }
     }
+    if (failed.length) throw new Error(`Restore interrupted for ${failed.join(", ")}; originals are in ${join(paths.state, "backups", stamp)}`)
+    throw error
+  } finally {
+    for (const change of changes) if (change.temp) await unlink(change.temp).catch((error) => { if (error.code !== "ENOENT") throw error })
   }
 }

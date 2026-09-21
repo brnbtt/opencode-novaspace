@@ -10,7 +10,7 @@ import { ProfileSync } from "../src/cards/setup/sync"
 import type { Snapshot } from "../src/cards/setup/sync-files"
 import { context, theme } from "./support"
 
-for (const mode of ["dark", "light"]) test(`sync UI selects whole-file groups, connects, syncs and enables automation (${mode})`, async () => {
+for (const mode of ["dark", "light"]) test(`sync UI selects sources and starts automatic sync on connection (${mode})`, async () => {
   const home = await mkdtemp(join(tmpdir(), "novaspace-sync-ui-"))
   const paths = { home, config: join(home, "config"), state: join(home, "state") }
   await mkdir(paths.config)
@@ -31,11 +31,15 @@ for (const mode of ["dark", "light"]) test(`sync UI selects whole-file groups, c
   ctx.keymap = { layer: (value) => { layer = value } }
   const view = await testRender(() => <SyncOnboardingModal ctx={ctx} engine={engine} onBack={() => {}} />, { width: 76, height: 40 })
   const scroll = () => view.renderer.root.findDescendantById("setup-sync-onboarding-scroll") as ScrollBoxRenderable
-  const ready = () => view.waitForFrame(async (frame) => {
-    if (!frame.includes("Working…")) return true
-    await Bun.sleep(5)
-    return false
-  }, { maxPasses: 400 })
+  const ready = async () => {
+    const deadline = Date.now() + 2_000
+    while (Date.now() < deadline) {
+      await view.flush()
+      if (!view.captureCharFrame().includes("Working…")) return
+      await Bun.sleep(10)
+    }
+    throw new Error(`Sync UI did not settle:\n${view.captureCharFrame()}`)
+  }
   const click = async (id: string) => {
     // Disk state can settle before the modal's promise chain clears `busy`.
     // Wait for the UI, not a machine-speed-dependent delay between actions.
@@ -70,19 +74,21 @@ for (const mode of ["dark", "light"]) test(`sync UI selects whole-file groups, c
       expect(created).toEqual(["brunobett_microsoft/opencode-profile", "brunobett_microsoft/opencode-profile"])
     } else await click("sync-connect")
     expect((await engine.state()).selected).not.toContain("terminal")
+    expect((await engine.state()).automatic).toBe(true)
+    expect((await engine.state()).status).toBe("synced")
     await click("sync-now")
     expect((await engine.state()).status).toBe("synced")
     expect(Object.keys(remote)).toEqual(["config/opencode.jsonc"])
     expect(await readFile(join(paths.config, "cli.json"), "utf8")).toContain("example")
     await click("sync-automatic")
-    expect((await engine.state()).automatic).toBe(true)
-    expect(view.captureCharFrame()).toContain("Automatic sync: On")
+    expect((await engine.state()).automatic).toBe(false)
+    expect(view.captureCharFrame()).toContain("Automatic sync: Off")
     expect(view.captureCharFrame()).toContain("Profile sync")
     view.resize(56, 20)
     await view.flush()
     expect(view.captureCharFrame()).toContain("Tab · Enter · Esc")
     expect(view.captureCharFrame()).toContain("Close")
     await click("sync-automatic")
-    expect((await engine.state()).automatic).toBe(false)
+    expect((await engine.state()).automatic).toBe(true)
   } finally { view.renderer.destroy(); await rm(home, { recursive: true, force: true }) }
 })

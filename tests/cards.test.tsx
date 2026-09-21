@@ -186,7 +186,7 @@ test("opens the compact setup hub from the main card", async () => {
     </box>
   ), { width: 90, height: 40 })
   try {
-    const steps = await onboarding.waitForFrame((value) => value.includes("Shared files sync together"))
+    const steps = await onboarding.waitForFrame((value) => value.includes("Your setup is prepared automatically"))
     expect(steps).toContain("OpenCode settings")
     expect(steps).toContain("Appearance & preferences")
     const scroll = onboarding.renderer.root.findDescendantById("setup-sync-onboarding-scroll") as ScrollBoxRenderable
@@ -197,16 +197,10 @@ test("opens the compact setup hub from the main card", async () => {
     const filesReview = onboarding.renderer.root.findDescendantById("sync-files-toggle")!
     await onboarding.mockMouse.click(filesReview.x + 1, filesReview.y)
     await onboarding.flush()
-    const review = onboarding.renderer.root.findDescendantById("setup-sync-review")!
-    await onboarding.mockMouse.click(review.x + 1, review.y)
-    scroll.scrollTo(0)
-    const plan = await onboarding.waitForFrame((value) => value.includes("Standardization preflight") && value.includes("Proposed moves · 1"))
-    expect(plan).toContain("Needs review")
-    expect(plan).toContain("Read-only preview")
-    const preflightScroll = onboarding.renderer.root.findDescendantById("setup-sync-onboarding-scroll") as ScrollBoxRenderable
-    preflightScroll.scrollTo(10_000)
-    await onboarding.flush()
-    expect(onboarding.captureCharFrame()).toContain("Project-specific · not synced · 1")
+    expect(onboarding.captureCharFrame()).toContain("Sync details")
+    expect(onboarding.renderer.root.findDescendantById("setup-sync-review")).toBeUndefined()
+    expect(onboarding.renderer.root.findDescendantById("sync-allow-paths")).toBeUndefined()
+    expect(onboarding.captureCharFrame()).not.toContain("Standardization")
     const setupBack = onboarding.renderer.root.findDescendantById("setup-sync-setup-back")!
     await onboarding.mockMouse.click(setupBack.x + 1, setupBack.y)
     expect(modal).not.toBe(syncModal)

@@ -4,6 +4,9 @@
   "workspaces": {
     "": {
       "name": "opencode-novaspace",
+      "dependencies": {
+        "jsonc-parser": "3.3.1",
+      },
       "devDependencies": {
         "@babel/core": "7.28.0",
         "@babel/preset-typescript": "7.27.1",
@@ -182,6 +185,8 @@
     "jsesc": ["jsesc@3.1.0", "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/jsesc/-/jsesc-3.1.0.tgz", { "bin": { "jsesc": "bin/jsesc" } }, "sha1-dNM1ojT2ftGZB/2t+sfM+dQJgl0="],
 
     "json5": ["json5@2.2.3", "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/json5/-/json5-2.2.3.tgz", { "bin": { "json5": "lib/cli.js" } }, "sha1-eM1vGhm9wStz21rQxh79ZsHikoM="],
+
+    "jsonc-parser": ["jsonc-parser@3.3.1", "", {}, "sha512-HUgH65KyejrUFPvHFPbqOY0rsFip3Bo5wb4ngvdi1EpCYWUQDC5V+Y7mZws+DLkr4M//zQJoanu1SP+87Dv1oQ=="],
 
     "locate-path": ["locate-path@3.0.0", "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/locate-path/-/locate-path-3.0.0.tgz", { "dependencies": { "p-locate": "^3.0.0", "path-exists": "^3.0.0" } }, "sha1-2+w7OrdZdYBxtY/ln8QYca8hQA4="],
 
