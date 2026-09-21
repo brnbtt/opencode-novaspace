@@ -14,6 +14,12 @@ export type UpdateState =
   | { status: "current"; target: string; version?: string }
   | { status: "outdated"; target: string; version?: string }
   | { status: "updating"; target: string; version?: string }
+  /**
+   * Applied and waiting for a restart. The host can still report `updating`
+   * right after it finishes, and an already-mounted sidebar cannot load the
+   * new code anyway, so this is terminal rather than a live reading.
+   */
+  | { status: "updated"; target: string; version?: string }
   | { status: "error"; message: string }
 
 export function updateSummary(state: UpdateState): { label: string; action?: string; tone: "muted" | "info" | "error" } {
@@ -26,6 +32,8 @@ export function updateSummary(state: UpdateState): { label: string; action?: str
       return { label: state.version ? `v${state.version} installed` : "Update available", action: "Update →", tone: "info" }
     case "updating":
       return { label: "Updating…", tone: "info" }
+    case "updated":
+      return { label: "Updated · restart to load", tone: "info" }
     case "error":
       return { label: state.message, tone: "error" }
     default:
@@ -34,7 +42,9 @@ export function updateSummary(state: UpdateState): { label: string; action?: str
 }
 
 export function installedVersion(state: UpdateState) {
-  return state.status === "current" || state.status === "outdated" || state.status === "updating" ? state.version : undefined
+  return state.status === "current" || state.status === "outdated" || state.status === "updating" || state.status === "updated"
+    ? state.version
+    : undefined
 }
 
 function toState(entry?: {
@@ -83,7 +93,10 @@ export async function applyUpdate(ctx: TuiContext, target: string): Promise<Upda
   try {
     if (!ctx.client.plugin?.update) return { status: "error", message: "This OpenCode version cannot update plugins" }
     await ctx.client.plugin.update({ targets: [target] })
-    return toState(await entryFor(ctx))
+    // Report the version the host knows about, but never its `updating` flag:
+    // it can still be set here, and nothing would clear it before a restart.
+    const entry = await entryFor(ctx).catch(() => undefined)
+    return { status: "updated", target, version: entry?.source?.version }
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Update failed" }
   }

@@ -446,13 +446,44 @@ test("offers an update only for a managed package install", async () => {
     await managed.waitForFrame((value) => value.includes("Updating…"))
     expect(applied).toEqual(["opencode-novaspace"])
 
-    resolveApply({ status: "current", target: "opencode-novaspace", version: "0.1.2" })
-    const done = await managed.waitForFrame((value) => value.includes("v0.1.2"))
+    resolveApply({ status: "updated", target: "opencode-novaspace", version: "0.1.1" })
+    // The host can still report `updating` immediately after a successful
+    // update, so the row must settle on its own rather than read that back.
+    const done = await managed.waitForFrame((value) => value.includes("restart to load"))
     expect(done).not.toContain("Update →")
+    expect(done).not.toContain("Updating…")
     // An already-mounted sidebar keeps running the previous code.
     expect(toasts.some((message) => message.includes("Restart the TUI"))).toBe(true)
   } finally {
     managed.renderer.destroy()
+  }
+})
+
+test("settles the update row when the host still reports updating", async () => {
+  const ctx = context()
+  ctx.ui.toast.show = () => {}
+  const view = await testRender(() => (
+    <SetupModal
+      ctx={ctx}
+      inventory={emptyInventory()}
+      loading={false}
+      update={{
+        load: async () => ({ status: "outdated", target: "opencode-novaspace", version: "0.1.1" }),
+        check: async () => ({ status: "outdated", target: "opencode-novaspace", version: "0.1.1" }),
+        // Mirrors the real host: the flag is still set right after the update.
+        apply: async () => ({ status: "updated", target: "opencode-novaspace", version: "0.1.1" }),
+      }}
+    />
+  ), { width: 54, height: 14 })
+  try {
+    const offered = await view.waitForFrame((value) => value.includes("Update →"))
+    const rows = offered.split("\n")
+    const updateRow = rows.findIndex((line) => line.includes("Update →"))
+    await view.mockMouse.click(rows[updateRow]!.indexOf("Update →") + 2, updateRow)
+    const settled = await view.waitForFrame((value) => value.includes("restart to load"))
+    expect(settled).not.toContain("Updating…")
+  } finally {
+    view.renderer.destroy()
   }
 })
 

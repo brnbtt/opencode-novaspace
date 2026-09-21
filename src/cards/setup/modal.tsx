@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { MouseButton } from "@opentui/core"
-import { createSignal, For, onMount, Show } from "solid-js"
+import { createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import type { TuiContext } from "../../types"
 import { cardSurface, nativeScrollbar, useHostDimensions } from "../../ui"
 import { displaySetupPath, SetupActionLink } from "./action"
@@ -123,22 +123,26 @@ export function SetupModal(props: {
   const dimensions = useHostDimensions(props.ctx)
   const [update, setUpdate] = createSignal<UpdateState>({ status: "unknown" })
   let disposed = false
-  const settle = (value: UpdateState) => { if (!disposed) setUpdate(value) }
+  let applying = false
+  const settle = (value: UpdateState) => { if (!disposed && !applying) setUpdate(value) }
   onMount(() => {
     void (props.update?.load ?? loadUpdateState)(props.ctx).then(settle)
     // A registry round-trip is slower, so it lands after the cached state.
     void (props.update?.check ?? checkForUpdate)(props.ctx).then((value) => {
       if (value.status !== "error") settle(value)
     })
-    return () => { disposed = true }
   })
+  onCleanup(() => { disposed = true })
   const runUpdate = () => {
     const current = update()
-    if (current.status !== "outdated") return
+    if (current.status !== "outdated" || applying) return
     const { target, version } = current
+    // Once applying, a late load/check must not overwrite the outcome.
+    applying = true
     setUpdate({ status: "updating", target, version })
     void (props.update?.apply ?? applyUpdate)(props.ctx, target).then((value) => {
-      settle(value)
+      if (disposed) return
+      setUpdate(value)
       props.ctx.ui.toast.show(value.status === "error"
         ? { message: value.message, variant: "error" }
         : { message: "novaSpace updated. Restart the TUI to load it.", variant: "success" })
