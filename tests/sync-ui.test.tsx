@@ -29,11 +29,14 @@ for (const mode of ["dark", "light"]) test(`sync UI selects whole-file groups, c
   const view = await testRender(() => <SyncOnboardingModal ctx={ctx} engine={engine} onBack={() => {}} />, { width: 76, height: 40 })
   const scroll = () => view.renderer.root.findDescendantById("setup-sync-onboarding-scroll") as ScrollBoxRenderable
   const click = async (id: string) => {
+    // Disk state can settle before the modal's promise chain clears `busy`.
+    // Wait for the UI, not a machine-speed-dependent delay between actions.
+    await view.waitForFrame((frame) => !frame.includes("Working…"))
     const node = view.renderer.root.findDescendantById(id)!
     scroll().scrollTo(scroll().scrollTop + node.y - scroll().viewport.y - 2)
     await view.flush()
     await view.mockMouse.click(node.x + 1, node.y)
-    await Bun.sleep(30); await view.flush()
+    await view.waitForFrame((frame) => !frame.includes("Working…"))
   }
   try {
     await Bun.sleep(40); await view.flush()

@@ -1,6 +1,10 @@
 # Changelog
 
-## 0.2.0
+## 0.2.1
+
+The first published release of the changes below. The `v0.2.0` workflow stopped
+before publishing because a UI test used a fixed delay between asynchronous
+actions. The test now waits for the modal to become ready.
 
 - Add subtle, theme-derived rounded card borders and a consistent scrollbar gutter.
 - Refine the settings modal with compact update status, clearer sections, terminal
