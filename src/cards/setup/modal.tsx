@@ -1,9 +1,9 @@
 /** @jsxImportSource @opentui/solid */
-import { MouseButton } from "@opentui/core"
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import type { TuiContext } from "../../types"
-import { cardSurface, nativeScrollbar, useHostDimensions } from "../../ui"
-import { displaySetupPath, SetupActionLink } from "./action"
+import { cardSurface, nativeScrollbar, Panel, useHostDimensions } from "../../ui"
+import { displaySetupPath, SetupActionLink, SetupActions } from "./action"
+import { profileSync, type ProfileSync, type SyncState } from "./sync"
 import { groupSetupSections, setupSections, type SetupInventory, type SetupTarget } from "./inventory"
 import type { StandardizationPreflight } from "./preflight"
 import { SyncOnboardingModal } from "./sync-onboarding"
@@ -112,6 +112,7 @@ export function SetupModal(props: {
   ctx: TuiContext
   inventory: SetupInventory
   loading: boolean
+  syncEngine?: ProfileSync
   openTarget?: OpenSetupTarget
   loadPreflight?: (ctx: TuiContext) => Promise<StandardizationPreflight>
   update?: {
@@ -122,10 +123,12 @@ export function SetupModal(props: {
 }) {
   const dimensions = useHostDimensions(props.ctx)
   const [update, setUpdate] = createSignal<UpdateState>({ status: "unknown" })
+  const [sync, setSync] = createSignal<SyncState>()
   let disposed = false
   let applying = false
   const settle = (value: UpdateState) => { if (!disposed && !applying) setUpdate(value) }
   onMount(() => {
+    void (props.syncEngine ?? profileSync).state().then((value) => { if (!disposed) setSync(value) }).catch(() => {})
     void (props.update?.load ?? loadUpdateState)(props.ctx).then(settle)
     // A registry round-trip is slower, so it lands after the cached state.
     void (props.update?.check ?? checkForUpdate)(props.ctx).then((value) => {
@@ -165,7 +168,7 @@ export function SetupModal(props: {
     props.ctx.ui.dialog.set({ size: "medium", centered: true })
   }
   const openSync = () => {
-    props.ctx.ui.dialog.show(() => <SyncOnboardingModal ctx={props.ctx} loadPreflight={props.loadPreflight} onBack={showSetup} />)
+    props.ctx.ui.dialog.show(() => <SyncOnboardingModal ctx={props.ctx} engine={props.syncEngine} loadPreflight={props.loadPreflight} onBack={showSetup} />)
     // show() replaces the host dialog and resets its size/centering.
     props.ctx.ui.dialog.set({ size: "medium", centered: true })
   }
@@ -178,11 +181,12 @@ export function SetupModal(props: {
     return props.ctx.theme.text.muted
   }
   return (
+    <SetupActions ctx={props.ctx}>
     <box
       id="sidebar-setup-modal"
       flexDirection="column"
       width="100%"
-      height={Math.min(28, Math.max(18, Math.floor(dimensions().height * 0.72)))}
+      height={Math.min(32, Math.max(10, dimensions().height - 6))}
       paddingLeft={2}
       paddingRight={2}
       paddingTop={1}
@@ -190,10 +194,17 @@ export function SetupModal(props: {
       backgroundColor={props.ctx.theme.background.base}
     >
       <box flexDirection="row" justifyContent="space-between" flexShrink={0} height={1}>
-        <text fg={props.ctx.theme.text.base}><b>novaSpace</b></text>
+        <text fg={props.ctx.theme.text.base}><b>novaSpace · Settings</b></text>
         <text fg={props.ctx.theme.text.muted}>{installedVersion(update()) ? `v${installedVersion(update())}` : ""}</text>
       </box>
-      <text flexShrink={0} fg={props.ctx.theme.text.muted}>OpenCode customization at a glance.</text>
+      <text flexShrink={0} fg={props.ctx.theme.text.muted}>Your customization, source files and profile.</text>
+
+      <box id="setup-update-panel" flexDirection="row" justifyContent="space-between" flexShrink={0} height={1}>
+        <text selectable={false} flexGrow={1} minWidth={0} wrapMode="none" truncate fg={updateTone()}>{updateSummary(update()).label}</text>
+        <Show when={updateSummary(update()).action}>
+          {(label) => <SetupActionLink id="setup-update-apply" ctx={props.ctx} label={label()} onPress={runUpdate} />}
+        </Show>
+      </box>
 
       <scrollbox
         id="setup-modal-scroll"
@@ -203,18 +214,14 @@ export function SetupModal(props: {
         horizontalScrollbarOptions={{ visible: false }}
         verticalScrollbarOptions={{ ...nativeScrollbar(props.ctx.theme), position: "absolute", right: 0, top: 0, height: "100%" }}
       >
-        <box flexDirection="column" gap={1} paddingRight={1}>
-          <box id="setup-sync-panel" flexDirection="row" justifyContent="space-between" alignItems="center" paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1} backgroundColor={cardSurface(props.ctx.theme, 0.18)}>
+        <box flexDirection="column" gap={1} paddingRight={2}>
+          <Panel id="setup-sync-panel" theme={props.ctx.theme} strength={0.18}>
+            <box flexDirection="row" justifyContent="space-between" height={1}>
             <text fg={props.ctx.theme.text.base}><b>Profile sync</b></text>
-            <SetupActionLink id="setup-sync-open" ctx={props.ctx} label="Set up sync →" onPress={openSync} />
-          </box>
-
-          <box id="setup-update-panel" flexDirection="row" justifyContent="space-between" alignItems="center" paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1} backgroundColor={cardSurface(props.ctx.theme, 0.18)}>
-            <text selectable={false} flexGrow={1} minWidth={0} wrapMode="none" truncate fg={updateTone()}>{updateSummary(update()).label}</text>
-            <Show when={updateSummary(update()).action}>
-              {(label) => <SetupActionLink id="setup-update-apply" ctx={props.ctx} label={label()} onPress={runUpdate} />}
-            </Show>
-          </box>
+            <SetupActionLink id="setup-sync-open" ctx={props.ctx} label={sync()?.repository ? "Manage sync →" : "Set up sync →"} onPress={openSync} />
+            </box>
+            <text fg={props.ctx.theme.text.muted} wrapMode="word">{sync()?.repository ? `${sync()?.repository} · ${sync()?.automatic ? "Automatic" : "Manual"}` : "Choose global files to keep in step across machines."}</text>
+          </Panel>
 
           <Show when={props.loading}>
             <text fg={props.ctx.theme.text.muted}>Refreshing local setup…</text>
@@ -230,15 +237,11 @@ export function SetupModal(props: {
                 })))
                 const listTitle = group.sections.length > 1 ? "Configured items" : group.sections[0]?.listTitle ?? "Configured items"
                 return (
-                  <box
+                  <Panel
                     id={`setup-${group.key}-section`}
-                    flexDirection="column"
                     marginBottom={1}
-                    paddingLeft={2}
-                    paddingRight={2}
-                    paddingTop={1}
-                    paddingBottom={1}
-                    backgroundColor={cardSurface(props.ctx.theme, groupedSettings() ? 0.14 : 0.1)}
+                    theme={props.ctx.theme}
+                    strength={groupedSettings() ? 0.14 : 0.1}
                   >
                     <Show when={group.sections.length > 1}>
                       <text fg={props.ctx.theme.text.feedback.info.base}><b>{groupedSettings() ? "OpenCode settings" : "Shared configuration"}</b></text>
@@ -261,7 +264,7 @@ export function SetupModal(props: {
                       )}</Show>
                     </box>
                     <EntryList ctx={props.ctx} section={group.key} title={listTitle} entries={entries} open={open} />
-                  </box>
+                  </Panel>
                 )
             }}</For>
           </box>
@@ -279,22 +282,24 @@ export function SetupModal(props: {
               </Show>
             </box>
           </Show>
+          <Show when={props.inventory.terminalSettings}>{(target) => (
+            <Panel theme={props.ctx.theme} strength={0.1}>
+              <text fg={props.ctx.theme.text.base}><b>Terminal preferences</b></text>
+              <text fg={props.ctx.theme.text.muted} wrapMode="word">Theme, keybindings, terminal behavior and novaSpace options.</text>
+              <box flexDirection="row" justifyContent="space-between" minWidth={0}>
+                <text flexGrow={1} minWidth={0} wrapMode="none" truncate fg={props.ctx.theme.text.muted}>{displaySetupPath(props.ctx, target().path)}</text>
+                <TargetLink id="setup-terminal-open" ctx={props.ctx} target={target()} onPress={() => open(target())} />
+              </box>
+            </Panel>
+          )}</Show>
         </box>
       </scrollbox>
 
       <box flexDirection="row" justifyContent="space-between" flexShrink={0} height={1} marginTop={1}>
-        <text fg={props.ctx.theme.text.muted}>Esc to close</text>
-        <box
-          paddingLeft={1}
-          paddingRight={1}
-          backgroundColor={props.ctx.theme.background.action.primary.hovered}
-          onMouseUp={(event) => {
-            if (event.button === MouseButton.LEFT && !event.isDragging) props.ctx.ui.dialog.clear()
-          }}
-        >
-          <text selectable={false} fg={props.ctx.theme.text.action.primary.hovered}>Close</text>
-        </box>
+        <text fg={props.ctx.theme.text.muted}>Tab · Enter · Esc to close</text>
+        <SetupActionLink id="setup-close" ctx={props.ctx} label="Close" onPress={() => props.ctx.ui.dialog.clear()} />
       </box>
     </box>
+    </SetupActions>
   )
 }

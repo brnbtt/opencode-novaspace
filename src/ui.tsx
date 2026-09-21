@@ -19,6 +19,36 @@ export function cardSurface(theme: Theme, strength: number) {
   return mix(parseColor(theme.background.base), parseColor(theme.background.action.primary.hovered), strength)
 }
 
+export function cardBorder(theme: Theme) {
+  return theme.border?.base ?? mix(parseColor(theme.background.base), parseColor(theme.text.muted), 0.55)
+}
+
+/** Text edges respect scroll clipping in both the host and test renderer. Native
+ * drawBox borders bypass scissor clipping; buffered borders disappear in the host. */
+export function roundedFrame(theme: () => Theme) {
+  let root: BoxRenderable | undefined
+  const [size, setSize] = createSignal({ width: 0, height: 0 })
+  const measure = () => { if (root) setSize({ width: root.width, height: root.height }) }
+  onMount(measure)
+  return {
+    ref(value: BoxRenderable) { root = value }, measure,
+    edges: () => <Show when={size().width >= 2 && size().height >= 2}>
+      <text position="absolute" left={0} top={0} height={1} width={size().width} zIndex={1} selectable={false} fg={cardBorder(theme())}>{`╭${"─".repeat(Math.max(0, size().width - 2))}╮`}</text>
+      <text position="absolute" left={0} bottom={0} height={1} width={size().width} zIndex={1} selectable={false} fg={cardBorder(theme())}>{`╰${"─".repeat(Math.max(0, size().width - 2))}╯`}</text>
+      <text position="absolute" left={0} top={1} width={1} height={Math.max(0, size().height - 2)} zIndex={1} selectable={false} fg={cardBorder(theme())}>{Array(Math.max(0, size().height - 2)).fill("│").join("\n")}</text>
+      <text position="absolute" right={0} top={1} width={1} height={Math.max(0, size().height - 2)} zIndex={1} selectable={false} fg={cardBorder(theme())}>{Array(Math.max(0, size().height - 2)).fill("│").join("\n")}</text>
+    </Show>,
+  }
+}
+
+export function Panel(props: { id?: string; theme: Theme; strength: number; marginBottom?: number; children: JSX.Element }) {
+  const frame = roundedFrame(() => props.theme)
+  return <box id={props.id} ref={frame.ref} onSizeChange={frame.measure} flexDirection="column" padding={1} marginBottom={props.marginBottom} backgroundColor={cardSurface(props.theme, props.strength)}>
+    <box flexDirection="column" paddingLeft={1} paddingRight={1}>{props.children}</box>
+    {frame.edges()}
+  </box>
+}
+
 export function nativeScrollbar(theme: Theme): ScrollBoxOptions["verticalScrollbarOptions"] {
   return {
     width: 1,
@@ -65,6 +95,7 @@ export function Card(props: {
   drag?: CardDragBinding
 }) {
   let root: BoxRenderable | undefined
+  const frame = roundedFrame(() => props.theme)
   createEffect(() => {
     const drag = props.drag
     if (root && drag) onCleanup(drag.manager.registerCard(drag.sessionID, drag.id, root))
@@ -90,15 +121,13 @@ export function Card(props: {
     && props.drag.manager.forSession(props.drag.sessionID) && props.drag.manager.gesture()?.moved
   return (
     <box
-      ref={(value) => { root = value }}
+      ref={(value) => { root = value; frame.ref(value) }}
+      onSizeChange={frame.measure}
       id={props.drag ? `card-${props.drag.id}` : undefined}
       flexDirection="column"
       backgroundColor={cardSurface(props.theme, strength())}
+      padding={1}
       opacity={lifted() ? 0.35 : 1}
-      paddingLeft={2}
-      paddingRight={2}
-      paddingTop={1}
-      paddingBottom={1}
       marginBottom={props.marginBottom ?? 0}
       onMouseOver={() => {
         if (hovered()) return
@@ -117,7 +146,8 @@ export function Card(props: {
         if (event.button === MouseButton.LEFT && !event.isDragging) props.onPress?.()
       }}
     >
-      {props.children}
+      <box flexDirection="column" paddingLeft={1} paddingRight={1} backgroundColor={cardSurface(props.theme, strength())}>{props.children}</box>
+      {frame.edges()}
     </box>
   )
 }

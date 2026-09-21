@@ -25,6 +25,7 @@ export type SetupInventory = {
   targets: Partial<Record<SetupSectionKey, SetupTarget>>
   files: Partial<Record<SetupSectionKey, SetupTarget[]>>
   settings?: SetupTarget
+  terminalSettings?: SetupTarget
 }
 
 export type SetupSection = {
@@ -196,7 +197,7 @@ export async function loadSetupInventory(ctx: TuiContext, options: { home?: stri
   const plugins = pluginResult.status === "fulfilled" ? pluginResult.value?.data ?? [] : []
   const configs = configResult.status === "fulfilled" ? configResult.value?.data ?? [] : []
   const home = options.home ?? process.env.HOME
-  const globalConfigFolder = home ? join(home, ".config/opencode") : undefined
+  const globalConfigFolder = home ? join(options.home ? join(home, ".config") : process.env.XDG_CONFIG_HOME ?? join(home, ".config"), "opencode") : undefined
   const documentPaths = configs
     .filter((config) => config.type === "document" && config.path)
     .map((config) => config.path!)
@@ -283,6 +284,7 @@ export async function loadSetupInventory(ctx: TuiContext, options: { home?: stri
       agents: uniqueTargets([...agentFiles, ...(agents.length ? settingsFile : [])]),
     },
     settings,
+    terminalSettings: await firstExisting([globalConfigFolder && join(globalConfigFolder, "cli.json")], "file"),
   }
 }
 

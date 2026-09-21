@@ -119,7 +119,7 @@ async function inspectPortableConfig(path: string, warnings: PreflightPath[], bl
 
 export async function loadStandardizationPreflight(ctx: TuiContext): Promise<StandardizationPreflight> {
   const home = process.env.HOME
-  const root = home ? join(home, ".config/opencode") : ".config/opencode"
+  const root = join(process.env.XDG_CONFIG_HOME ?? (home ? join(home, ".config") : ".config"), "opencode")
   const ready: PreflightPath[] = []
   const warnings: PreflightPath[] = []
   const blockers: PreflightPath[] = []

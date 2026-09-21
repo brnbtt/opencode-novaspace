@@ -31,7 +31,8 @@ The optional Memory card can read an existing OptMem installation. novaSpace
 does not register memory tools; the independent `opencode-optmem` plugin owns
 that capability.
 
-Every card uses the same theme-derived subtle surface and hover transition.
+Every card uses the same theme-derived subtle surface, rounded border and hover
+transition. A gutter separates cards from the scrollbar in every theme.
 
 The setup modal has a compact **Set up sync** entry, then mirrors the five layers
 on the card in the same order: Skills, Instructions, Plugins, MCP, and
@@ -43,18 +44,77 @@ inset panel and scroll independently. The inner list consumes wheel input only
 while the pointer is inside it, leaving the outer modal available everywhere
 else. Files open through the operating system's default application.
 
-**Set up sync** opens a separate four-step onboarding dialog. Its first step is
-a read-only standardization preflight that proposes compatibility-folder moves,
-flags machine-specific paths and possible literal secrets, lists local-only
-exclusions, and identifies project-specific configuration that remains owned
-by the project rather than the private global profile.
+The modal keeps update status and keyboard hints visible while its sections
+scroll. Use **Tab / Shift+Tab** to move between actions and **Enter** to activate
+one. **Terminal preferences** links directly to `cli.json`.
+
+### Profile sync
+
+**Set up sync** lets you choose groups, connect a private GitHub repository,
+and run two-way sync. After the first successful sync, enable **Automatic sync**
+to check once a minute while an OpenCode TUI is open. Use the same repository
+on another machine to restore your profile and keep the selected groups in step.
+GitHub CLI (`gh auth login`) is required. Sync is bound to the account used when
+connecting; switching accounts pauses transfers until you reconnect or switch back.
+
+| Group | Included |
+| --- | --- |
+| OpenCode settings | Whole global `opencode.json` and `opencode.jsonc`: configured default model, providers, plugins, MCP, permissions, inline agents and commands |
+| Terminal preferences | `cli.json`: theme, keybindings, terminal preferences and novaSpace plugin options; global `themes/` files |
+| Skills | Global `skills/`, `~/.agents/skills/` and `~/.claude/skills/`, preserving their locations |
+| Instructions | Global `AGENTS.md` |
+| Agents & commands | Global `agents/` and `commands/` files |
+| Local plugin files | Global `plugins/` scripts, opt-in |
+
+Shared configuration is selected and transferred **once per file**. Selecting
+OpenCode settings includes Plugins, MCP and inline Subagents together; those
+sections are not split or rewritten. JSONC comments and formatting survive.
+The sync screen lists the exact local files and explains each group under
+**review details**. Saving a new selection pauses automation until you enable it again.
+
+Session history, the current session's model choice, sign-ins and OAuth tokens,
+environment variables, service settings, caches, project configuration, installed
+package caches and saved card drag positions stay local. Initial card layout
+options in `cli.json` can sync; drag positions in OpenCode's plugin storage cannot.
+Referenced files outside the listed roots are not copied.
+Package declarations travel with settings; OpenCode installs the packages on the
+destination machine. Source checkouts such as the novaSpace development repo do
+not need to exist on a consumer machine.
+
+Sync merges edits to **different files**. If both machines change the same file,
+including different sections of a shared JSON file, it pauses and lists the
+conflicts. Choose the local or repository versions explicitly in the sync screen.
+Remote revisions remain in GitHub history. Replaced and deleted local files are
+backed up under `~/.local/state/novaspace/backups/` before being applied. Deletions
+propagate only after a file has been synced; existing files on a newly connected
+machine cause a conflict if their contents differ from the repository.
+
+The GitHub repository stores a versioned `.novaspace/profile.json` snapshot with
+base64 file contents (an `x:` prefix marks executable scripts). File ownership
+and other permission bits stay local. Base64 is **not encryption**; repository access controls
+protect the profile. Common literal credential patterns block sync, and absolute
+machine paths require an explicit review override. This is a best-effort check,
+so review the selected files. Use `{env:NAME}` references for credentials and sign
+in independently on each machine. Symlinks are rejected for review, and `.env`,
+`.git`, `node_modules` and backup directories are excluded. Profiles are limited
+to roughly 500 KB of file content and 1,000 files.
+
+State, selection, automation preference and backups are local to each machine,
+under `$XDG_STATE_HOME/novaspace` (default `~/.local/state/novaspace`). Global
+configuration follows `$XDG_CONFIG_HOME/opencode`. Multiple TUI windows share a
+cross-process lease; concurrent remote writes use GitHub's revision check and retry
+on the next sync. Offline failures keep local files and the last successful baseline.
+Restart OpenCode after restoring plugins or server settings that require a reload.
+
+**Review local layout** remains a read-only preflight. Moving compatibility
+folders into OpenCode's canonical layout is optional for sync.
 
 The setup card always starts in a usable local state from OpenCode's cached
 inventory. GitHub identity lookup runs only as background enrichment. A missing
 GitHub CLI, sign-in, or private profile repository is the normal unconfigured
 state and reports `● Set up sync`; it never blocks local setup discovery. The
-profile model also reserves `syncing`, `synced`, `pending`, and `error` states
-for the planned settings synchronization feature.
+profile reports `syncing`, `synced`, `pending`, `paused`, `conflict`, and `error`
+from the local sync state.
 
 The signed-in account can change at any time, so the card re-reads it when the
 setup hub opens and whenever `gh` rewrites its configuration. It watches that
@@ -170,8 +230,8 @@ Keep plugin source, development loading, and stable installation separate:
 - **Development host:** disable the exact stable IDs, then load a tiny wrapper
   with `novaspace.dev.*` IDs that imports the checkout. This avoids package
   deduplication while keeping mutable source confined to the dev workspace.
-- **Stable installation:** configure an exact npm version or complete Git commit
-  in the global profile. OpenCode owns its managed package cache; do not edit it.
+- **Stable installation:** configure `opencode-novaspace` in the global profile.
+  OpenCode owns its managed package cache; do not edit it.
 - **Config plugins:** reserve `~/.config/opencode/plugins/` for small personal
   scripts intentionally versioned with the profile, not cloned package repos.
 
@@ -191,9 +251,9 @@ Example development-host override (the relative path is resolved from this
 Card options for the development host go in `cli.json` like any other CLI
 plugin option, keyed by the same package path.
 
-The global profile should use a pinned stable package such as
-`opencode-novaspace@0.1.0`; active feature work should never be the globally
-installed copy.
+Keep the stable package entry unpinned to use the hub's update check. An explicit
+`@version` stays on that version and cannot offer later releases. Active feature
+work should use the development host.
 
 ## Packaging
 
@@ -241,8 +301,8 @@ Before publishing `opencode-novaspace`:
    Publish from CI: a local `npm publish` can target a corporate registry proxy.
 3. Tag the matching `vX.Y.Z` commit.
 4. Publish with provenance and create release notes from the same tag.
-5. Update the global OpenCode profile to the exact npm version only after
-   installation verification.
+5. Verify the managed installation and leave its package entry unpinned for
+   future updates.
 
 npm versions are immutable, so verify the install path with a `0.1.0-rc.N`
 prerelease on the `next` dist-tag before spending the `0.1.0` version. Confirm

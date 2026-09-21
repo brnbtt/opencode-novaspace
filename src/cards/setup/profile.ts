@@ -1,16 +1,18 @@
 import { stat } from "node:fs/promises"
 import { join } from "node:path"
+import { profileSync } from "./sync"
 
 export type ProfileState = {
   login?: string
   connection: "signed-out" | "connected"
-  sync: "unconfigured" | "syncing" | "synced" | "pending" | "error"
+  sync: "unconfigured" | "syncing" | "synced" | "pending" | "error" | "conflict" | "paused"
   lastSyncedAt?: number
   error?: string
 }
 
 export function githubAccountConfig() {
-  const directory = Bun.env.GH_CONFIG_DIR ?? (Bun.env.HOME ? join(Bun.env.HOME, ".config/gh") : undefined)
+  const configHome = Bun.env.XDG_CONFIG_HOME ?? (Bun.env.HOME ? join(Bun.env.HOME, ".config") : undefined)
+  const directory = Bun.env.GH_CONFIG_DIR ?? (configHome ? join(configHome, "gh") : undefined)
   return directory ? join(directory, "hosts.yml") : undefined
 }
 
@@ -47,7 +49,8 @@ export async function loadGitHubProfile(signal?: AbortSignal): Promise<ProfileSt
     if (signal?.aborted) throw new Error("Profile lookup cancelled")
     if (timedOut) throw new Error("GitHub profile lookup timed out")
     if (code !== 0 || !login) return { connection: "signed-out", sync: "unconfigured" }
-    return { login, connection: "connected", sync: "unconfigured" }
+    const state = await profileSync.state()
+    return { login, connection: "connected", sync: state.repository && state.account !== login ? "paused" : state.status, lastSyncedAt: state.lastSyncedAt }
   } catch (error) {
     if (signal?.aborted) throw error
     return {

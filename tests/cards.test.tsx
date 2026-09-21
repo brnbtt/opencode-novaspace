@@ -15,6 +15,7 @@ import type { StandardizationPreflight } from "../src/cards/setup/preflight"
 import type { UpdateState } from "../src/cards/setup/update"
 import { latestContext, SessionInfoCard } from "../src/cards/session-info/index"
 import { context, theme } from "./support"
+import { ProfileSync } from "../src/cards/setup/sync"
 
 test("animates the card surface slightly on hover", async () => {
   const options = resolveOptions({ hoverDuration: 40, hoverStrength: 0.1 })
@@ -37,6 +38,10 @@ test("animates the card surface slightly on hover", async () => {
 })
 
 test("opens the compact setup hub from the main card", async () => {
+  const syncHome = await mkdtemp(join(tmpdir(), "novaspace-ui-"))
+  const syncEngine = new ProfileSync({ home: syncHome, config: join(syncHome, "config"), state: join(syncHome, "state") }, {
+    async account() { return "example" }, async verify() {}, async read() { return { files: {} } }, async write() { return "1" },
+  })
   let modal: (() => JSX.Element) | undefined
   const opened: string[] = []
   const ctx = context((render) => { modal = render })
@@ -89,6 +94,7 @@ test("opens the compact setup hub from the main card", async () => {
       loadInventory={async () => inventory}
       loadPreflight={async () => preflight}
       openTarget={async (target) => { opened.push(target.path) }}
+      syncEngine={syncEngine}
     />
   ), { width: 38, height: 15 })
   try {
@@ -153,9 +159,9 @@ test("opens the compact setup hub from the main card", async () => {
     const captured = detail.captureSpans()
     const backgroundAt = (node: BoxRenderable) => {
       let x = 0
-      for (const span of captured.lines[node.y]!.spans) {
+      for (const span of captured.lines[node.y + 1]!.spans) {
         x += span.width
-        if (x > node.x) return span.bg.toInts().slice(0, 3).join(",")
+        if (x > node.x + 2) return span.bg.toInts().slice(0, 3).join(",")
       }
       return ""
     }
@@ -214,13 +220,18 @@ test("opens the compact setup hub from the main card", async () => {
     </box>
   ), { width: 90, height: 40 })
   try {
-    const steps = await onboarding.waitForFrame((value) => value.includes("Set up sync") && value.includes("Automatic sync"))
-    expect(steps).toContain("Standardize setup")
-    expect(steps).toContain("Connect GitHub")
-    expect(steps).toContain("Private repository")
-    expect(steps).toContain("Automatic sync")
+    const steps = await onboarding.waitForFrame((value) => value.includes("Choose what travels"))
+    expect(steps).toContain("OpenCode settings")
+    expect(steps).toContain("Terminal preferences")
+    const scroll = onboarding.renderer.root.findDescendantById("setup-sync-onboarding-scroll") as ScrollBoxRenderable
+    await Bun.sleep(30)
+    await onboarding.flush()
+    scroll.scrollTo(10_000)
+    await onboarding.flush()
+    expect(onboarding.captureCharFrame()).toContain("Automatic sync")
     const review = onboarding.renderer.root.findDescendantById("setup-sync-review")!
     await onboarding.mockMouse.click(review.x + 1, review.y)
+    scroll.scrollTo(0)
     const plan = await onboarding.waitForFrame((value) => value.includes("Standardization preflight") && value.includes("Proposed moves · 1"))
     expect(plan).toContain("Needs review")
     expect(plan).toContain("Read-only preview")
@@ -234,6 +245,7 @@ test("opens the compact setup hub from the main card", async () => {
     expect(dialogSettings).toEqual({ size: "medium", centered: true })
   } finally {
     onboarding.renderer.destroy()
+    await rm(syncHome, { recursive: true, force: true })
   }
 
   const home = await mkdtemp(join(tmpdir(), "novaspace-inventory-"))

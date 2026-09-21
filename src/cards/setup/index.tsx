@@ -6,6 +6,7 @@ import { cachedSetupInventory, loadSetupInventory, setupSections, type SetupInve
 import { SetupModal, type OpenSetupTarget } from "./modal"
 import type { StandardizationPreflight } from "./preflight"
 import { loadGitHubProfile, githubAccountStamp, type ProfileState } from "./profile"
+import { profileSync, type ProfileSync } from "./sync"
 
 function Layer(props: { row: SetupSection; index: number; revealed: number; ctx: CardProps["ctx"] }) {
   const active = () => props.index < props.revealed
@@ -30,6 +31,7 @@ export function SetupCard(props: CardProps & {
   loadInventory?: (ctx: CardProps["ctx"]) => Promise<SetupInventory>
   loadPreflight?: (ctx: CardProps["ctx"]) => Promise<StandardizationPreflight>
   openTarget?: OpenSetupTarget
+  syncEngine?: ProfileSync
 }) {
   const [inventory, setInventory] = createSignal<SetupInventory>(cachedSetupInventory(props.ctx))
   const [inventoryLoading, setInventoryLoading] = createSignal(true)
@@ -43,6 +45,7 @@ export function SetupCard(props: CardProps & {
   let profileAbort: AbortController | undefined
   let accountStamp: number | undefined
   let accountWatch: ReturnType<typeof setInterval> | undefined
+  let syncWatch: ReturnType<typeof setInterval> | undefined
 
   /**
    * The signed-in account can change at any time (`gh auth switch`), so this
@@ -93,11 +96,17 @@ export function SetupCard(props: CardProps & {
         void refreshProfile()
       })
     }, props.accountPollMs ?? 5_000)
+    if (!props.loadProfile) syncWatch = setInterval(() => {
+      void profileSync.state().then((state) => {
+        if (!disposed) setProfile((value) => ({ ...value, sync: state.repository && state.account !== value.login ? "paused" : state.status, lastSyncedAt: state.lastSyncedAt }))
+      }).catch(() => {})
+    }, 2_000)
   })
   onCleanup(() => {
     disposed = true
     profileAbort?.abort()
     if (accountWatch) clearInterval(accountWatch)
+    if (syncWatch) clearInterval(syncWatch)
     if (sweep) clearInterval(sweep)
   })
 
@@ -108,13 +117,15 @@ export function SetupCard(props: CardProps & {
     if (profile().sync === "synced") return "Synced"
     if (profile().sync === "pending") return "Pending"
     if (profile().sync === "error") return "Error"
+    if (profile().sync === "conflict") return "Conflict"
+    if (profile().sync === "paused") return "Paused"
     return "Set up sync"
   })
   const syncColor = () => {
     const colors = props.ctx.theme.text
     if (profile().sync === "synced") return colors.feedback.success.base
     if (profile().sync === "syncing") return colors.feedback.info.base
-    if (profile().sync === "pending") return colors.feedback.warning.base
+    if (["pending", "conflict", "paused"].includes(profile().sync)) return colors.feedback.warning.base
     if (profile().sync === "error") return colors.feedback.error.base
     return colors.muted
   }
@@ -143,6 +154,7 @@ export function SetupCard(props: CardProps & {
         loading={inventoryLoading()}
         openTarget={props.openTarget}
         loadPreflight={props.loadPreflight}
+        syncEngine={props.syncEngine}
       />
     ))
     // show() replaces the host dialog and resets its size/centering.

@@ -10,6 +10,7 @@ import { createLayoutController, type LayoutController } from "./layout"
 import { CardCarousel } from "./carousel"
 import { createSidebarDrag, type SidebarDrag } from "./drag"
 import { DragOverlay } from "./drag-overlay"
+import { profileSync } from "./cards/setup/sync"
 
 export function RenderCard(props: { id: CardID; ctx: TuiContext; sessionID: string; controller: LayoutController; drag?: SidebarDrag }) {
   // Keep this object stable when unrelated reactive props (e.g. dragging) change.
@@ -42,7 +43,7 @@ export function Sidebar(props: { ctx: TuiContext; sessionID: string; controller:
   return (
     <box ref={(value) => { root = value }} flexDirection="column" flexGrow={1} height="100%">
       <Divider theme={props.ctx.theme} />
-      <box flexDirection="column" flexShrink={0} gap={options().gap}>
+      <box flexDirection="column" flexShrink={0} gap={options().gap} paddingRight={2}>
         <For each={layout().top.map((card) => card.id)}>{(id) => <RenderCard id={id} ctx={props.ctx} sessionID={props.sessionID} controller={props.controller} drag={props.drag} />}</For>
       </box>
       <scrollbox
@@ -53,7 +54,7 @@ export function Sidebar(props: { ctx: TuiContext; sessionID: string; controller:
         minHeight={1}
         scrollY
         horizontalScrollbarOptions={{ visible: false }}
-        verticalScrollbarOptions={{ ...nativeScrollbar(props.ctx.theme), visible: true }}
+        verticalScrollbarOptions={{ ...nativeScrollbar(props.ctx.theme), visible: layout().scroll.length > 0 }}
         marginTop={layout().top.length && layout().scroll.length ? options().gap : 0}
       >
         <box flexDirection="column" gap={options().gap} paddingRight={1}>
@@ -70,7 +71,7 @@ function BottomRegion(props: FooterProps) {
   let root: BoxRenderable | undefined
   createEffect(() => { if (root) onCleanup(props.drag.registerBottom(props.sessionID, root)) })
   return (
-    <box id="sidebar-bottom" ref={(value) => { root = value }} flexDirection="column" flexShrink={0}>
+    <box id="sidebar-bottom" ref={(value) => { root = value }} flexDirection="column" flexShrink={0} paddingRight={2}>
       <Divider theme={props.ctx.theme} />
       <Show when={props.controller.layout().bottom.length} fallback={<box height={4} />}>
         <CardCarousel ctx={props.ctx} controller={props.controller} drag={{ manager: props.drag, sessionID: props.sessionID }} render={(id) => <RenderCard id={id} ctx={props.ctx} sessionID={props.sessionID} controller={props.controller} drag={props.drag} />} />
@@ -86,6 +87,7 @@ export function SidebarFooter(props: FooterProps) {
 export default {
   id: "novaspace.tui",
   setup(ctx: TuiContext) {
+    const stopSync = profileSync.start()
     const controller = createLayoutController(ctx)
     const drag = createSidebarDrag(controller, ctx)
     const unregisterOverlay = ctx.ui.slot({ append: "app", render: () => <DragOverlay ctx={ctx} drag={drag} /> })
@@ -98,6 +100,7 @@ export default {
       render: ({ sessionID }) => <SidebarFooter ctx={ctx} sessionID={sessionID} controller={controller} drag={drag} />,
     })
     return () => {
+      stopSync()
       drag.dispose()
       unregisterOverlay()
       unregisterContent()
