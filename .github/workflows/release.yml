@@ -27,6 +27,9 @@ jobs:
 
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
+      # Publishes compiled JS: under node_modules the host's JSX transform is
+      # skipped, so raw .tsx cannot reach OpenCode's shared Solid runtime.
+      - run: bun run build
       - run: bun test --preload @opentui/solid/preload
       - run: bun pm pack --dry-run
 

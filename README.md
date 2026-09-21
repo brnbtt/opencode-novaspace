@@ -85,31 +85,16 @@ Long bottom cards scroll within a height cap so the middle area remains usable.
 
 ## Installation
 
-novaSpace is not published to npm yet. Until then, install the plugin from a
-pinned commit of this repository:
-
 ```sh
-opencode plugin add 'git+https://github.com/brnbtt/opencode-novaspace.git#<commit>'
+opencode plugin add opencode-novaspace
 ```
-
-> **Known limitation.** Git installs are currently degraded. OpenCode's managed
-> package cache runs a full install for a Git specifier, which pulls this
-> package's `devDependencies` (`solid-js`, `@opentui/*`) into an isolated tree.
-> The plugin then resolves its own copy of Solid instead of the host's, so the
-> sidebar renders its first frame and never updates: inventory counts, the
-> GitHub profile, and session context all stay frozen. Use the published npm
-> package instead:
->
-> ```sh
-> opencode plugin add opencode-novaspace@0.1.0
-> ```
->
-> The npm package declares its OpenTUI and Solid peers as optional
-> (`peerDependenciesMeta`) so installers do not materialize a second runtime in
-> the plugin's cache directory, and imports resolve against the host.
 
 Restart the TUI completely after installing. Reloading the service alone does
 not rebuild the already-mounted sidebar.
+
+Options are **CLI plugin options** and belong in `cli.json`; see
+"Configuration". The package ships compiled JavaScript rather than its `.tsx`
+sources, for the reason described under "Packaging".
 
 ## Configuration
 
@@ -198,31 +183,65 @@ Example development-host override (the relative path is resolved from this
 Card options for the development host go in `cli.json` like any other CLI
 plugin option, keyed by the same package path.
 
-Once published, the global profile should use a pinned stable package such as
+The global profile should use a pinned stable package such as
 `opencode-novaspace@0.1.0`; active feature work should never be the globally
 installed copy.
 
+## Packaging
+
+An installed plugin always lands under `node_modules`, and that single fact
+decides how this package must be built.
+
+OpenCode shares its own Solid and OpenTUI runtime with a plugin by rewriting
+the import specifiers it finds in a module's **source text**. The Solid JSX
+transform that would normally produce those specifiers is skipped for anything
+under `node_modules`, so a published `.tsx` module never gets rewritten. It
+then fails one of two ways:
+
+- with peers optional, nothing resolves `@opentui/solid` and the TUI half fails
+  to load with `Cannot find package '@opentui/solid'`;
+- with peers materialized beside the plugin, they resolve to a **second** Solid
+  runtime, so the sidebar paints one frame and no reactive update ever lands —
+  inventory counts stay `0`, the profile stays `Local profile`, and session
+  context stays `—`.
+
+`bun run build` (`scripts/build.ts`) compiles `src/**` ahead of time using the
+same Babel pipeline `@opentui/solid` ships. The compiled modules carry literal
+`@opentui/solid`, `solid-js`, and `@opentui/core` imports, which is the form
+the host rewrite recognises, so an installed package binds the host's runtime
+exactly like a local checkout does. `package.json` therefore publishes `dist/`
+only, and peers stay optional in `peerDependenciesMeta` so no second runtime is
+ever installed.
+
+`tests/package.test.ts` guards this: the compiled output must contain literal
+runtime imports, no JSX, no surviving `@jsxImportSource` pragma, and only
+`.js`-suffixed relative specifiers.
+
+Local-path development is unaffected and still loads the `.tsx` sources
+directly through OpenCode's JSX loader.
+
 ## Releases
 
-Git commit installation is the stable channel until the first npm release, but
-it is a degraded one: see the limitation under "Installation". Peer
-dependencies must stay optional in `peerDependenciesMeta` so a managed install
-never materializes a second Solid/OpenTUI runtime beside the plugin.
+Peer dependencies must stay optional in `peerDependenciesMeta`, and the
+published tarball must contain compiled `dist/` output rather than `.tsx`
+sources. Both are covered by "Packaging" and enforced by the test suite.
 
 Before publishing `opencode-novaspace`:
 
-1. Verify CI, typecheck, tests, and `bun pm pack --dry-run`.
+1. Verify CI, typecheck, tests, `bun run build`, and `bun pm pack --dry-run`.
 2. Configure npm 2FA and GitHub trusted publishing for this repository.
    Publish from CI: a local `npm publish` can target a corporate registry proxy.
-3. Remove `private: true`, then tag the matching `vX.Y.Z` commit.
+3. Tag the matching `vX.Y.Z` commit.
 4. Publish with provenance and create release notes from the same tag.
-5. Update the global OpenCode profile from the prior full Git commit to the
-   exact npm version only after installation verification.
+5. Update the global OpenCode profile to the exact npm version only after
+   installation verification.
 
 npm versions are immutable, so verify the install path with a `0.1.0-rc.N`
 prerelease on the `next` dist-tag before spending the `0.1.0` version. Confirm
-the managed cache no longer materializes `solid-js` or `@opentui/*` and that
-inventory counts, the GitHub profile, and session context update after mount.
+the managed cache does not materialize `solid-js` or `@opentui/*`, and that
+inventory counts, the GitHub profile, and session context update after mount —
+a populated count is the proof that a reactive update landed after the first
+frame.
 
 ## Project structure
 
@@ -233,11 +252,13 @@ file has a single owner.
 Entry points
 
 - `index.ts` / `tui.tsx` (repo root) — thin re-export facades named by the
-  `package.json` exports.
+  `package.json` exports. Published builds expose their compiled counterparts,
+  `dist/index.js` and `dist/tui.js`.
 - `src/index.ts` — minimal package entrypoint used to load the TUI extension;
   novaSpace registers no server tools.
 - `src/tui.tsx` — TUI plugin; mounts the sidebar, footer, and drag-overlay
   slots and composes cards through `RenderCard`.
+- `scripts/build.ts` — publish-time compilation into `dist/`; see "Packaging".
 
 Framework (`src/`)
 
@@ -268,11 +289,19 @@ Cards (`src/cards/`)
 ### Add a card
 
 1. Create `src/cards/<id>/index.tsx` that renders with the shared `Card`
-   primitives and default-exports `defineCard({ id, title, render })`.
+   primitives and default-exports `defineCard({ id, title, render })`. Start the
+   file with `/** @jsxImportSource @opentui/solid */`, like every other card.
 2. Add the id to `cardIDs` (and a `defaultPins` entry) in `src/config.ts`.
 3. Import it and add it to the card list in `src/cards/registry.tsx`.
+4. List the id in your `cli.json` `cards` option, then restart the TUI
+   completely — a reload does not remount an already-mounted sidebar.
 
 `CardID` and the layout stay type-safe because they derive from `cardIDs`.
+
+Keep reactive helpers on the `.tsx` path even when they contain no JSX; see the
+runtime note under "Host integration". New files need no build step while you
+develop against a local checkout, and are picked up automatically by
+`bun run build` when publishing.
 
 ### Publish a framework-only build
 
@@ -301,6 +330,8 @@ but ordinary `.ts` helpers resolve the local Solid package. Signals from that
 second runtime do not notify the rendered components. Keep reactive helpers on
 the `.tsx` path, even when they contain no JSX. Same-runtime headless tests alone
 do not catch this; the fix was checked with a cancelled gesture in the live TUI.
+These shims matter only for local-path development; `bun run build` compiles
+every module the same way, so it drops them from the published output.
 
 `card-preview.tsx` copies public box/text paint properties from the mounted card.
 JSX text comes from `textNode.gatherWithInheritedStyle`; `.chunks` only describes
@@ -317,6 +348,7 @@ modal sizes itself from terminal dimensions and applies dialog settings after
 bun install
 bun test
 bun run typecheck
+bun run build
 ```
 
 ## License

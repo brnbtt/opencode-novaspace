@@ -1,6 +1,6 @@
 {
   "name": "opencode-novaspace",
-  "version": "0.1.0-rc.2",
+  "version": "0.1.0-rc.3",
   "description": "novaSpace: a configurable card-based OpenCode sidebar and profile manager",
   "license": "MIT",
   "repository": {
@@ -11,17 +11,28 @@
   "bugs": {
     "url": "https://github.com/brnbtt/opencode-novaspace/issues"
   },
-  "keywords": ["opencode", "opencode-plugin", "sidebar", "terminal-ui", "tui"],
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "sidebar",
+    "terminal-ui",
+    "tui"
+  ],
   "type": "module",
-  "files": ["index.ts", "tui.tsx", "src", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "exports": {
-    ".": "./index.ts",
-    "./tui": "./tui.tsx"
+    ".": "./dist/index.js",
+    "./tui": "./dist/tui.js"
   },
   "scripts": {
+    "build": "bun run scripts/build.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test --preload @opentui/solid/preload",
-    "prepublishOnly": "bun run typecheck && bun test --preload @opentui/solid/preload"
+    "prepublishOnly": "bun run typecheck && bun test --preload @opentui/solid/preload && bun run build"
   },
   "peerDependencies": {
     "@opentui/core": ">=0.5.8",
@@ -29,14 +40,23 @@
     "solid-js": ">=1.9.0"
   },
   "peerDependenciesMeta": {
-    "@opentui/core": { "optional": true },
-    "@opentui/solid": { "optional": true },
-    "solid-js": { "optional": true }
+    "@opentui/core": {
+      "optional": true
+    },
+    "@opentui/solid": {
+      "optional": true
+    },
+    "solid-js": {
+      "optional": true
+    }
   },
   "devDependencies": {
+    "@babel/core": "7.28.0",
+    "@babel/preset-typescript": "7.27.1",
     "@opentui/core": "0.5.8",
     "@opentui/solid": "0.5.8",
     "@types/bun": "^1.3.0",
+    "babel-preset-solid": "1.9.12",
     "solid-js": "1.9.15",
     "typescript": "^5.8.2"
   }

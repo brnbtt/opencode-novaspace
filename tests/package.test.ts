@@ -4,7 +4,7 @@ import serverPlugin from "../src/index"
 test("ships a TUI-only package without bundled OptMem tools", async () => {
   const manifest = await Bun.file(new URL("../package.json", import.meta.url)).json()
   expect(manifest.name).toBe("opencode-novaspace")
-  expect(manifest.exports["./tui"]).toBe("./tui.tsx")
+  expect(manifest.exports["./tui"]).toBe("./dist/tui.js")
   expect(serverPlugin.id).toBe("novaspace")
   expect(serverPlugin.setup()).toBeUndefined()
   expect(await Bun.file(new URL("../src/cards/memory/tools.ts", import.meta.url)).exists()).toBe(false)
@@ -58,5 +58,32 @@ test("keeps host runtime peers optional so installs stay single-runtime", async 
   for (const peer of ["@opentui/core", "@opentui/solid", "solid-js"]) {
     expect(manifest.peerDependencies[peer]).toBeString()
     expect(manifest.peerDependenciesMeta?.[peer]?.optional).toBe(true)
+  }
+})
+
+test("publishes compiled modules the host import rewrite can reach", async () => {
+  const root = new URL("..", import.meta.url).pathname
+  await Bun.$`bun run build`.cwd(root).quiet()
+
+  const files: string[] = []
+  for await (const file of new Bun.Glob("**/*.js").scan({ cwd: `${root}/dist` })) files.push(file)
+  expect(files.length).toBeGreaterThan(0)
+
+  const sources = await Promise.all(files.map((file) => Bun.file(`${root}/dist/${file}`).text()))
+  const shipped = sources.join("\n")
+
+  // The host shares its Solid/OpenTUI runtime by rewriting specifiers it finds
+  // in a module's source text. Under node_modules the JSX transform that would
+  // emit them is skipped, so a pragma-only module resolves nothing and a
+  // bundled copy resolves a second runtime. Compiled output carries them
+  // literally, which is the only form the rewrite recognises.
+  expect(shipped).toContain('from "@opentui/solid"')
+  expect(shipped).not.toContain("@jsxImportSource")
+  for (const source of sources) expect(source).not.toMatch(/<[A-Za-z]/)
+
+  // Relative specifiers must survive as resolvable paths once the .tsx sources
+  // are gone from the published tarball.
+  for (const specifier of shipped.matchAll(/from\s+"(\.[^"]*)"/g)) {
+    expect(specifier[1]).toEndWith(".js")
   }
 })
