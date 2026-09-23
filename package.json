@@ -1,7 +1,7 @@
 {
   "name": "opencode-novaspace",
-  "version": "0.3.0",
-  "description": "novaSpace: a configurable card-based OpenCode sidebar and profile manager",
+  "version": "0.3.1",
+  "description": "novaSpace: a card-based sidebar for OpenCode that syncs your setup across machines",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -14,7 +14,10 @@
   "keywords": [
     "opencode",
     "opencode-plugin",
+    "opencode-tui",
     "sidebar",
+    "profile-sync",
+    "settings-sync",
     "terminal-ui",
     "tui"
   ],

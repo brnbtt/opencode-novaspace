@@ -25,7 +25,7 @@ export type CardDefinition = {
 export type PlacedCard = CardDefinition & { pin: CardPin }
 
 // Each card subfolder default-exports one of these. Register it in
-// cards/registry.tsx. See README "Add a card".
+// cards/registry.tsx. See CONTRIBUTING "Add a card".
 export function defineCard(card: CardDefinition): CardDefinition {
   return card
 }

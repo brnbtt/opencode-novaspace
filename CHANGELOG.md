@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1
+
+- Rewrite the README for users, with screenshots of the sidebar, settings,
+  profile sync and card arrangement. Move development, packaging and release
+  notes to CONTRIBUTING.md and the full sync reference to docs/sync.md.
+- No functional changes.
+
 ## 0.3.0
 
 - Prepare a portable sync copy automatically, without moving files, rewriting

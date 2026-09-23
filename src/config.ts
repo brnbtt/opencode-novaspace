@@ -12,7 +12,7 @@ export const cardIDs = [
 
 export type CardID = typeof cardIDs[number]
 // A fresh install shows only the generic cards. Personal cards are added
-// through the user's opencode.json(c) plugin options (see README).
+// through the novaSpace plugin options in cli.json (see README).
 export const defaultCardOrder: readonly CardID[] = ["setup", "session-info"]
 export type CardPin = "top" | "bottom" | false
 
