@@ -1,31 +1,38 @@
 /** @jsxImportSource @opentui/solid */
-import type { CardID, SidebarOptions } from "../config"
+import { createSignal } from "solid-js"
+import type { CardID, CustomCardID, SidebarOptions } from "../config"
 import type { CardDefinition, PlacedCard } from "../card"
-// Generic cards that ship with the plugin framework.
 import { setup } from "./setup"
 import { sessionInfo } from "./session-info"
-// Personal cards. Remove this block (and their folders) to publish a
-// framework-only build; also trim the matching IDs in ../config.ts.
-import { workingSet } from "./working-set"
-import { subagents } from "./subagents"
-import { memory } from "./memory"
-import { copilot } from "./copilot"
 
-// The active card set for this checkout. Add a card by dropping a subfolder in
-// src/cards/ that default-exports defineCard(...) and adding it to this list.
-const definitions = () => [setup, sessionInfo, workingSet, subagents, memory, copilot]
+// Built-in cards. Local custom cards are registered at runtime by
+// ../custom-cards.ts from the customCards option.
+const builtins = () => [setup, sessionInfo]
+const [custom, setCustom] = createSignal<ReadonlyMap<CustomCardID, CardDefinition>>(new Map())
 
-// Resolved lazily on first use. The setup card transitively imports this module
+export function registerCustomCard(definition: CardDefinition & { id: CustomCardID }) {
+  setCustom((current) => new Map(current).set(definition.id, definition))
+  return () => setCustom((current) => {
+    if (current.get(definition.id) !== definition) return current
+    const next = new Map(current)
+    next.delete(definition.id)
+    return next
+  })
+}
+
+// Resolved lazily on each read. The setup card transitively imports this module
 // through its settings modal, so reading a card export at module-eval time could
 // hit a circular-import temporal dead zone depending on load order.
-let byId: Record<CardID, CardDefinition> | undefined
-export function cards(): Record<CardID, CardDefinition> {
-  return byId ??= Object.fromEntries(definitions().map((card) => [card.id, card])) as Record<CardID, CardDefinition>
+export function cards(): Partial<Record<CardID, CardDefinition>> {
+  return Object.fromEntries([...builtins(), ...custom().values()].map((card) => [card.id, card]))
 }
 
 export function activeCards(options: SidebarOptions): PlacedCard[] {
   const all = cards()
-  return options.cards.flatMap((id) => options.hidden.has(id) ? [] : [{ ...all[id], pin: options.pins[id] }])
+  return options.cards.flatMap((id) => {
+    const card = all[id]
+    return options.hidden.has(id) || !card ? [] : [{ ...card, pin: options.pins[id] ?? false }]
+  })
 }
 
 export function partitionCards(options: SidebarOptions) {

@@ -10,6 +10,13 @@ test("ships a TUI-only package without bundled OptMem tools", async () => {
   expect(await Bun.file(new URL("../src/cards/memory/tools.ts", import.meta.url)).exists()).toBe(false)
 })
 
+test("ships only the built-in cards", async () => {
+  const root = new URL("../src/cards", import.meta.url).pathname
+  const folders = new Set<string>()
+  for await (const file of new Bun.Glob("*/index.tsx").scan({ cwd: root })) folders.add(file.split("/")[0]!)
+  expect([...folders].sort()).toEqual(["session-info", "setup"])
+})
+
 test("pins the OpenTUI JSX runtime in every shipped TSX module", async () => {
   const root = new URL("..", import.meta.url).pathname
   const files: string[] = []

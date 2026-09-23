@@ -57,7 +57,7 @@ function inside(path: string, root: string) {
 async function projectRoot(ctx: TuiContext, location: Location) {
   try {
     const result = await ctx.client.vcs.get({ location }, { signal: new AbortController().signal })
-    return result.location.project.directory
+    return result.location.project?.directory ?? location.directory
   } catch {
     return location.directory
   }

@@ -11,6 +11,7 @@ import { CardCarousel } from "./carousel"
 import { createSidebarDrag, type SidebarDrag } from "./drag"
 import { DragOverlay } from "./drag-overlay"
 import { profileSync } from "./cards/setup/sync"
+import { loadCustomCards } from "./custom-cards"
 
 export function RenderCard(props: { id: CardID; ctx: TuiContext; sessionID: string; controller: LayoutController; drag?: SidebarDrag }) {
   // Keep this object stable when unrelated reactive props (e.g. dragging) change.
@@ -20,7 +21,9 @@ export function RenderCard(props: { id: CardID; ctx: TuiContext; sessionID: stri
     get sessionID() { return props.sessionID },
     id: props.id,
   } : undefined
-  return cards()[props.id].render({
+  const card = cards()[props.id]
+  if (!card) return null
+  return card.render({
     ctx: props.ctx,
     drag: binding,
     get dragging() { return !!props.drag?.gesture() },
@@ -87,6 +90,7 @@ export function SidebarFooter(props: FooterProps) {
 export default {
   id: "novaspace.tui",
   setup(ctx: TuiContext) {
+    const stopCustomCards = loadCustomCards(ctx)
     const stopSync = profileSync.start()
     const controller = createLayoutController(ctx)
     const drag = createSidebarDrag(controller, ctx)
@@ -105,6 +109,7 @@ export default {
       unregisterOverlay()
       unregisterContent()
       unregisterFooter()
+      stopCustomCards()
     }
   },
 }

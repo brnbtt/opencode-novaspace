@@ -2,7 +2,7 @@
 import { createMemo } from "solid-js"
 // .tsx selects OpenCode 2.0.7's host-Solid import rewrite for this reactive helper.
 import { createStore, produce } from "solid-js/store"
-import { isCardID, resolveOptions, type CardID, type CardPin } from "./config"
+import { isCardID, isCustomCardID, resolveOptions, type CardID, type CardPin } from "./config"
 import { partitionCards } from "./cards/registry"
 import type { TuiContext } from "./types"
 
@@ -22,7 +22,10 @@ export function createLayoutController(ctx: TuiContext) {
   const [preferences, update] = ctx.storage?.store<LayoutPreferences>("sidebar-layout-v1", { initial: {} }) ?? volatileStore()
   const options = createMemo(() => {
     const base = resolveOptions(ctx.options)
-    return resolveOptions({ ...base, cards: preferences.cards ?? base.cards, pins: { ...base.pins, ...preferences.pins }, hidden: preferences.hidden ?? [...base.hidden] })
+    // Newly configured custom cards join an existing saved layout without resetting it.
+    const saved = preferences.cards
+    const cards = saved ? [...saved, ...base.cards.filter((id) => isCustomCardID(id) && !saved.includes(id))] : base.cards
+    return resolveOptions({ ...base, cards, pins: { ...base.pins, ...preferences.pins }, hidden: preferences.hidden ?? [...base.hidden] })
   })
   const layout = createMemo(() => partitionCards(options()))
   const activeBottom = createMemo(() => layout().bottom.find((card) => card.id === preferences.activeBottom)?.id ?? layout().bottom[0]?.id)

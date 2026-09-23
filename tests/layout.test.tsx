@@ -4,9 +4,10 @@ import { createStore, produce } from "solid-js/store"
 import { defaultCardOrder, resolveOptions } from "../src/config"
 import { partitionCards } from "../src/cards/registry"
 import { createLayoutController, type LayoutPreferences } from "../src/layout"
+import "./custom-cards.fixture"
 import { context } from "./support"
 
-test("ships a framework-only default layout and adds personal cards on request", () => {
+test("ships a framework-only default layout and adds custom cards on request", () => {
   const options = resolveOptions({})
   const layout = partitionCards(options)
   expect(defaultCardOrder).toEqual(["setup", "session-info"])
@@ -14,24 +15,26 @@ test("ships a framework-only default layout and adds personal cards on request",
   expect(layout.scroll.map((card) => card.id)).toEqual([])
   expect(layout.bottom.map((card) => card.id)).toEqual(["session-info"])
 
-  // Personal cards appear only when the user's options opt into them.
+  // Custom cards appear only when the user's options opt into them.
   const personal = partitionCards(resolveOptions({
-    cards: ["setup", "working-set", "subagents", "memory", "copilot"],
-    pins: { setup: "top", copilot: "bottom" },
+    cards: ["setup", "custom:working-set", "custom:subagents", "custom:memory", "custom:copilot"],
+    pins: { setup: "top", "custom:copilot": "bottom" },
   }))
-  expect(personal.scroll.map((card) => card.id)).toEqual(["working-set", "subagents", "memory"])
-  expect(personal.bottom.map((card) => card.id)).toEqual(["copilot"])
+  expect(personal.scroll.map((card) => card.id)).toEqual(["custom:working-set", "custom:subagents", "custom:memory"])
+  expect(personal.bottom.map((card) => card.id)).toEqual(["custom:copilot"])
 
-  const duplicateBottom = resolveOptions({ pins: { setup: "bottom", copilot: "bottom" } })
+  const duplicateBottom = resolveOptions({ cards: ["setup", "custom:copilot"], pins: { setup: "bottom", "custom:copilot": "bottom" } })
   expect(duplicateBottom.pins.setup).toBe("bottom")
-  expect(duplicateBottom.pins.copilot).toBe("bottom")
-  const existing = partitionCards(resolveOptions({ cards: ["setup", "copilot"], pins: { copilot: "bottom" } }))
-  expect(existing.bottom.map((card) => card.id)).toEqual(["copilot"])
+  expect(duplicateBottom.pins["custom:copilot"]).toBe("bottom")
+  // Former built-in IDs are no longer recognised.
+  expect(resolveOptions({ cards: ["setup", "subagents", "custom:subagents"] }).cards).toEqual(["setup", "custom:subagents"])
+  const existing = partitionCards(resolveOptions({ cards: ["setup", "custom:copilot"], pins: { "custom:copilot": "bottom" } }))
+  expect(existing.bottom.map((card) => card.id)).toEqual(["custom:copilot"])
 })
 
 test("reordering, pins, and selected pages persist across reloads", async () => {
   const ctx = context()
-  ctx.options = { cards: ["setup", "working-set", "subagents", "copilot"] }
+  ctx.options = { cards: ["setup", "custom:working-set", "custom:subagents", "custom:copilot"], pins: { "custom:copilot": "bottom" } }
   let saved: LayoutPreferences = {}
   ctx.storage = {
     store<T extends object>(_key: string, options: { initial: T }) {
@@ -45,30 +48,55 @@ test("reordering, pins, and selected pages persist across reloads", async () => 
   let dispose!: () => void
   const controller = createRoot((cleanup) => { dispose = cleanup; return createLayoutController(ctx) })
   try {
-    await controller.move("subagents", -1)
-    expect(controller.layout().scroll.map((card) => card.id)).toEqual(["subagents", "working-set"])
-    await controller.pin("subagents", "bottom")
-    expect(controller.layout().bottom.map((card) => card.id)).toEqual(["subagents", "copilot"])
-    expect(controller.layout().scroll.map((card) => card.id)).toEqual(["working-set"])
-    expect(controller.activeBottom()).toBe("subagents")
-    await controller.move("subagents", 1)
-    expect(controller.layout().bottom.map((card) => card.id)).toEqual(["copilot", "subagents"])
-    await controller.select("copilot")
+    await controller.move("custom:subagents", -1)
+    expect(controller.layout().scroll.map((card) => card.id)).toEqual(["custom:subagents", "custom:working-set"])
+    await controller.pin("custom:subagents", "bottom")
+    expect(controller.layout().bottom.map((card) => card.id)).toEqual(["custom:subagents", "custom:copilot"])
+    expect(controller.layout().scroll.map((card) => card.id)).toEqual(["custom:working-set"])
+    expect(controller.activeBottom()).toBe("custom:subagents")
+    await controller.move("custom:subagents", 1)
+    expect(controller.layout().bottom.map((card) => card.id)).toEqual(["custom:copilot", "custom:subagents"])
+    await controller.select("custom:copilot")
   } finally { dispose() }
 
   const restored = createRoot((cleanup) => { dispose = cleanup; return createLayoutController(ctx) })
   try {
-    expect(restored.layout().bottom.map((card) => card.id)).toEqual(["copilot", "subagents"])
-    expect(restored.activeBottom()).toBe("copilot")
-    await restored.hide("copilot")
-    expect(restored.activeBottom()).toBe("subagents")
-    await restored.pin("subagents", false)
+    expect(restored.layout().bottom.map((card) => card.id)).toEqual(["custom:copilot", "custom:subagents"])
+    expect(restored.activeBottom()).toBe("custom:copilot")
+    await restored.hide("custom:copilot")
+    expect(restored.activeBottom()).toBe("custom:subagents")
+    await restored.pin("custom:subagents", false)
     expect(restored.layout().bottom).toHaveLength(0)
-    expect(restored.layout().scroll.map((card) => card.id)).toEqual(["working-set", "subagents"])
+    expect(restored.layout().scroll.map((card) => card.id)).toEqual(["custom:working-set", "custom:subagents"])
     await restored.pin("session-info", "bottom")
     expect(restored.activeBottom()).toBe("session-info")
     await restored.reset()
-    expect(restored.layout().bottom.map((card) => card.id)).toEqual(["copilot"])
-    expect(restored.layout().scroll.map((card) => card.id)).toEqual(["working-set", "subagents"])
+    expect(restored.layout().bottom.map((card) => card.id)).toEqual(["custom:copilot"])
+    expect(restored.layout().scroll.map((card) => card.id)).toEqual(["custom:working-set", "custom:subagents"])
   } finally { dispose() }
+})
+
+test("declared custom cards join the default order and an existing saved layout", () => {
+  const options = resolveOptions({
+    customCards: { "custom:subagents": "~/cards/subagents.js", "custom:Bad": "/x.js", "custom:relative": "cards/x.js", other: "/y.js" },
+  })
+  expect(options.customCards).toEqual({ "custom:subagents": "~/cards/subagents.js" })
+  expect(options.cards).toEqual(["setup", "session-info", "custom:subagents"])
+  expect(options.pins["custom:subagents"]).toBe(false)
+
+  const ctx = context()
+  ctx.options = { customCards: { "custom:subagents": "/cards/subagents.js", "custom:memory": "/cards/memory.js" } }
+  // "subagents" is a stale former built-in ID left in a saved layout.
+  const saved = { cards: ["session-info", "subagents", "custom:memory", "setup"] } as LayoutPreferences
+  ctx.storage = {
+    store<T extends object>(_key: string, options: { initial: T }) {
+      const [state, setState] = createStore<T>({ ...options.initial, ...saved })
+      return [state, async (update: (draft: T) => void) => { setState(produce(update)) }]
+    },
+  }
+  createRoot((dispose) => {
+    const controller = createLayoutController(ctx)
+    expect(controller.options().cards).toEqual(["session-info", "custom:memory", "setup", "custom:subagents"])
+    dispose()
+  })
 })

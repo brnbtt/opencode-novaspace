@@ -1,6 +1,6 @@
 {
   "name": "opencode-novaspace",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "novaSpace: a card-based sidebar for OpenCode that syncs your setup across machines",
   "license": "MIT",
   "repository": {

@@ -18,22 +18,24 @@ bun run build
 
 ## Cards
 
-The framework ships two generic cards, active by default on a fresh install:
+novaSpace ships two built-in cards, active by default on a fresh install:
 
 - **Profile & setup** (`setup`) — pinned local/GitHub profile and setup inventory
   with a compact customization hub.
 - **Session info** (`session-info`) — pinned context tokens, context usage, cost,
   and workspace/branch, using the native OpenCode sidebar data.
 
-This checkout also carries four opt-in cards that are not part of the framework:
-Working Set (`working-set`, Git status), Subagents (`subagents`, activity), Memory
-(`memory`, OptMem status), and GitHub Copilot (`copilot`, usage). They live in
-their own folders under `src/cards/` and are wired in `src/cards/registry.tsx`; a
-fresh install does not show them unless `cli.json` lists them in its options.
+Every other card is a local custom card that the user declares in the
+`customCards` option (see the README). `src/custom-cards.tsx` imports each module
+in the background, validates its `apiVersion: 1` default export, and registers it
+in `src/cards/registry.tsx` under its `custom:` ID. The registry is a signal, so
+the layout picks the card up once it has loaded. A missing or invalid module is
+skipped with a toast. Custom cards receive the normal `CardProps` plus `chrome`
+(`Card`, `CardTitle`, `CardAction`, `cardHeader`, `metricRow`) so they can match
+the built-in cards without importing novaSpace internals.
 
-The optional Memory card can read an existing OptMem installation. novaSpace
-does not register memory tools; the independent `opencode-optmem` plugin owns
-that capability.
+Do not add personal cards to this repository. Tests that need extra cards
+register stand-ins from `tests/custom-cards.fixture.tsx`.
 
 Layout ordering, placement, hidden cards and the selected page are saved through
 OpenCode's plugin storage (`sidebar-layout-v1`) and survive reloads/restarts.
@@ -158,7 +160,8 @@ against an isolated demo profile, never a personal one:
 - [`ttyd`](https://github.com/tsl0922/ttyd) with the DOM renderer, captured by
   headless Chrome at 1440×860 and a device scale factor of 2.
 
-Keep account names, paths and personal cards out of new screenshots.
+Keep account names and paths out of new screenshots. Screenshots that need more
+than the built-in cards use demo custom cards.
 
 ## Project structure
 
@@ -181,7 +184,8 @@ Framework (`src/`)
 
 - `types.ts` — the host `TuiContext` / `ServerContext` contract and shared data
   types (`Session`, `Theme`).
-- `config.ts` — card IDs, default order and pins, and option parsing.
+- `config.ts` — built-in and `custom:` card IDs, default order and pins, and
+  option parsing (including `customCards`).
 - `card.ts` — the card contract: `CardProps`, `CardDefinition`, and `defineCard`.
 - `ui.tsx` — shared card primitives: `Card`, `CardTitle` (the drag grip),
   `CardAction`, `Divider`, and surface/scrollbar helpers.
@@ -191,20 +195,22 @@ Framework (`src/`)
 - `card-preview.tsx` — snapshots a mounted card into the floating drag copy.
 - `carousel.tsx` — bottom page carousel and the page markers.
 - `host.ts` — adapts the native OpenCode sidebar host layout (see below).
-- `services/refresh.ts` — generic serialized, abortable refresh queue.
+- `custom-cards.tsx` — loads local custom card modules and hands them `chrome`.
 - `layout.ts` / `drag.ts` — stable re-export entrypoints (see the runtime note
   below).
 
 Cards (`src/cards/`)
 
-- `registry.tsx` — the active card list, `cards` lookup, and `partitionCards`
-  (top/scroll/bottom). Generic and personal imports are grouped here.
-- `<id>/index.tsx` — one subfolder per card, each default-exporting one
+- `registry.tsx` — built-in cards plus registered custom cards, the `cards`
+  lookup, and `partitionCards` (top/scroll/bottom).
+- `<id>/index.tsx` — one subfolder per built-in card, each default-exporting one
   `defineCard(...)`. Cards that need helpers keep them in the same folder:
-  `setup/` (inventory, modal, profile, sync), `memory/` (backend, store, format,
-  tools, types), `copilot/` (usage, store).
+  `setup/` (inventory, modal, profile, sync).
 
 ### Add a card
+
+Most cards belong outside novaSpace as custom cards (see the README). To add a
+built-in card:
 
 1. Create `src/cards/<id>/index.tsx` that renders with the shared `Card`
    primitives and default-exports `defineCard({ id, title, render })`. Start the
@@ -221,15 +227,13 @@ runtime note under "Host integration". New files need no build step while you
 develop against a local checkout, and are picked up automatically by
 `bun run build` when publishing.
 
-### Publish a framework-only build
+### Publish
 
-The generic cards (`setup`, `session-info`) are the framework's default. To ship
-without the personal cards, remove the personal block in `src/cards/registry.tsx`,
-delete their `src/cards/<id>/` folders, and trim their ids from `cardIDs` /
-`defaultPins` in `src/config.ts`. A consumer then adds their own cards the same
-way. Because plugins are referenced from `opencode.json(c)` by path or package,
-this repo is the checkout you own and edit; installed npm packages live in
-OpenCode's managed location and are not hand-edited.
+This repository only contains the built-in cards (`setup`, `session-info`), so
+every build is framework-only. Because plugins are referenced from
+`opencode.json(c)` by path or package, this repo is the checkout you own and
+edit; installed npm packages live in OpenCode's managed location and are not
+hand-edited.
 
 ## Host integration
 

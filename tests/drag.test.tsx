@@ -7,6 +7,7 @@ import { createLayoutController } from "../src/layout"
 import { Sidebar, SidebarFooter } from "../src/tui"
 import { createSidebarDrag, type SidebarDrag } from "../src/drag"
 import { DragOverlay } from "../src/drag-overlay"
+import "./custom-cards.fixture"
 import { context, theme } from "./support"
 
 async function dragFixture(bottom = true, height = 40) {
@@ -17,7 +18,7 @@ async function dragFixture(bottom = true, height = 40) {
     const binding = input().commands[0]!
     escape = () => binding.enabled?.() ? binding.run() : false
   } }
-  ctx.options = { cards: ["working-set", "subagents", "session-info"], pins: { "session-info": bottom ? "bottom" : false } }
+  ctx.options = { cards: ["custom:working-set", "custom:subagents", "session-info"], pins: { "session-info": bottom ? "bottom" : false } }
   let controller!: ReturnType<typeof createLayoutController>
   let drag!: SidebarDrag
   const view = await testRender(() => {
@@ -55,29 +56,29 @@ test("dragging real card grips reorders, previews pinning, and unpins back into 
     expect(frame).not.toContain("⇩")
     expect(frame).not.toContain("↑")
     expect(frame).toContain("⠿ Subagents")
-    await press("subagents")
-    expect(drag.gesture()?.id).toBe("subagents")
+    await press("custom:subagents")
+    expect(drag.gesture()?.id).toBe("custom:subagents")
     expect(view.renderer.hasSelection).toBe(false)
-    const first = node("card-working-set")
+    const first = node("card-custom:working-set")
     await view.mockMouse.emitMouseEvent("drag", first.x + 3, first.y)
     await view.flush()
     expect(node("sidebar-drop-line")).toBeDefined()
     const floating = node("sidebar-drag-preview")
-    expect(floating.width).toBe(node("card-subagents").width)
-    expect(floating.height).toBe(node("card-subagents").height)
-    expect(node("card-subagents").opacity).toBe(0.35)
+    expect(floating.width).toBe(node("card-custom:subagents").width)
+    expect(floating.height).toBe(node("card-custom:subagents").height)
+    expect(node("card-custom:subagents").opacity).toBe(0.35)
     const previewText = view.captureCharFrame().split("\n").slice(floating.y, floating.y + floating.height).map((line) => line.slice(floating.x, floating.x + floating.width)).join("\n")
     expect(previewText).toContain("⠿ Subagents")
     expect(previewText).toContain("No subagents yet.")
-    expect(controller.layout().scroll.map((card) => card.id)).toEqual(["working-set", "subagents"])
+    expect(controller.layout().scroll.map((card) => card.id)).toEqual(["custom:working-set", "custom:subagents"])
     await view.mockMouse.release(first.x + 3, first.y)
     await view.flush()
-    expect(controller.layout().scroll.map((card) => card.id)).toEqual(["subagents", "working-set"])
-    expect(node("card-subagents").y).toBeLessThan(node("card-working-set").y)
+    expect(controller.layout().scroll.map((card) => card.id)).toEqual(["custom:subagents", "custom:working-set"])
+    expect(node("card-custom:subagents").y).toBeLessThan(node("card-custom:working-set").y)
     expect(drag.gesture()).toBeUndefined()
-    expect(node("card-subagents").opacity).toBe(1)
+    expect(node("card-custom:subagents").opacity).toBe(1)
 
-    await press("subagents")
+    await press("custom:subagents")
     const footer = node("sidebar-bottom")
     await view.mockMouse.emitMouseEvent("drag", footer.x + 5, footer.y + 2)
     await view.flush()
@@ -86,29 +87,29 @@ test("dragging real card grips reorders, previews pinning, and unpins back into 
     expect(controller.layout().bottom.map((card) => card.id)).toEqual(["session-info"])
     await view.mockMouse.release(footer.x + 5, footer.y + 2)
     await view.flush()
-    expect(controller.activeBottom()).toBe("subagents")
-    expect(controller.layout().scroll.some((card) => card.id === "subagents")).toBe(false)
-    expect(controller.layout().bottom.map((card) => card.id)).toEqual(["session-info", "subagents"])
+    expect(controller.activeBottom()).toBe("custom:subagents")
+    expect(controller.layout().scroll.some((card) => card.id === "custom:subagents")).toBe(false)
+    expect(controller.layout().bottom.map((card) => card.id)).toEqual(["session-info", "custom:subagents"])
 
-    await press("subagents")
+    await press("custom:subagents")
     const dot = node("sidebar-page-session-info")
     await view.mockMouse.emitMouseEvent("drag", dot.x, dot.y)
     await view.flush()
     expect(view.captureCharFrame()).toContain("Move before Session info")
     await view.mockMouse.release(dot.x, dot.y)
     await view.flush()
-    expect(controller.layout().bottom.map((card) => card.id)).toEqual(["subagents", "session-info"])
-    expect(controller.activeBottom()).toBe("subagents")
+    expect(controller.layout().bottom.map((card) => card.id)).toEqual(["custom:subagents", "session-info"])
+    expect(controller.activeBottom()).toBe("custom:subagents")
 
-    await press("subagents")
+    await press("custom:subagents")
     const middle = node("sidebar-middle")
     await view.mockMouse.emitMouseEvent("drag", middle.x + 4, middle.y)
     await view.flush()
     await view.mockMouse.release(middle.x + 4, middle.y)
     await view.flush()
     expect(controller.layout().bottom.map((card) => card.id)).toEqual(["session-info"])
-    expect(controller.layout().scroll[0]?.id).toBe("subagents")
-    expect(node("card-subagents").y).toBeLessThan(node("card-working-set").y)
+    expect(controller.layout().scroll[0]?.id).toBe("custom:subagents")
+    expect(node("card-custom:subagents").y).toBeLessThan(node("card-custom:working-set").y)
   } finally { view.renderer.destroy() }
 })
 
@@ -123,7 +124,7 @@ test("floating preview preserves the full expanded card, styles, and pickup stat
     onCleanup(() => { unmounts++ })
     const [value, update] = createSignal(42)
     setValue = update
-    const binding = { manager: drag, sessionID: "session", id: "memory" as const }
+    const binding = { manager: drag, sessionID: "session", id: "custom:memory" as const }
     return <Card theme={theme} strength={0.14} drag={binding}>
       <CardTitle theme={theme} title="Expanded card" drag={binding} />
       <text fg={theme.text.feedback.info.base}>Ready to drag</text>
@@ -147,7 +148,7 @@ test("floating preview preserves the full expanded card, styles, and pickup stat
     const original = await view.waitForFrame((frame) => frame.includes("Expanded card"))
     expect(original).not.toContain("Expanded Ω details")
     await view.waitForVisualIdle()
-    const handle = view.renderer.root.findDescendantById("card-memory-handle")!
+    const handle = view.renderer.root.findDescendantById("card-custom:memory-handle")!
     await view.mockMouse.pressDown(handle.x, handle.y)
     await view.flush()
     await view.mockMouse.emitMouseEvent("drag", 45, 5)
@@ -176,7 +177,7 @@ test("drag autoscroll reveals clipped cards and cancellation stops without movin
   const { controller, drag, view, node, press } = await dragFixture(true, 18)
   try {
     await view.waitForFrame((frame) => frame.includes("Working Set"))
-    await press("working-set")
+    await press("custom:working-set")
     const scroll = node("sidebar-middle") as ScrollBoxRenderable
     await view.mockMouse.emitMouseEvent("drag", scroll.viewport.x + 4, scroll.viewport.y + scroll.viewport.height - 1)
     await Bun.sleep(180)
@@ -185,7 +186,7 @@ test("drag autoscroll reveals clipped cards and cancellation stops without movin
     drag.cancel()
     await view.mockMouse.release(55, 0)
     await view.flush()
-    expect(controller.layout().scroll.map((card) => card.id)).toEqual(["working-set", "subagents"])
+    expect(controller.layout().scroll.map((card) => card.id)).toEqual(["custom:working-set", "custom:subagents"])
   } finally { view.renderer.destroy() }
 })
 
@@ -197,9 +198,9 @@ test("card actions still click normally and body text selection does not start a
     drag = createSidebarDrag(createLayoutController(ctx), ctx)
     onCleanup(() => drag.dispose())
     return <>
-      <Card theme={theme} strength={0.14} drag={{ manager: drag, sessionID: "session", id: "working-set" }}>
+      <Card theme={theme} strength={0.14} drag={{ manager: drag, sessionID: "session", id: "custom:working-set" }}>
         <box {...cardHeader}>
-          <CardTitle theme={theme} title="Title" drag={{ manager: drag, sessionID: "session", id: "working-set" }} />
+          <CardTitle theme={theme} title="Title" drag={{ manager: drag, sessionID: "session", id: "custom:working-set" }} />
           <CardAction theme={theme} label="Refresh" hovered={false} disabled={!!drag.gesture()} onMouseOver={() => {}} onMouseOut={() => {}} onPress={() => { clicked++ }} />
         </box>
         <text>Selectable body text</text>
@@ -231,7 +232,7 @@ test("dragging supports an empty footer and cancels without changing the saved l
   try {
     await view.waitForFrame((frame) => frame.includes("Subagents"))
     expect(node("sidebar-bottom")).toBeUndefined()
-    await press("subagents")
+    await press("custom:subagents")
     expect(node("sidebar-bottom")).toBeDefined()
     const footer = node("sidebar-bottom")
     await view.mockMouse.emitMouseEvent("drag", footer.x + 4, footer.y + 2)
@@ -243,24 +244,24 @@ test("dragging supports an empty footer and cancels without changing the saved l
     expect(controller.layout().bottom).toHaveLength(0)
     expect(node("sidebar-bottom")).toBeUndefined()
 
-    await press("subagents")
+    await press("custom:subagents")
     await view.mockMouse.emitMouseEvent("drag", 55, 3)
     await view.mockMouse.release(55, 3)
     await view.flush()
     expect(outsideClicks()).toBe(0)
-    expect(controller.layout().scroll.map((card) => card.id)).toEqual(["working-set", "subagents", "session-info"])
+    expect(controller.layout().scroll.map((card) => card.id)).toEqual(["custom:working-set", "custom:subagents", "session-info"])
     expect(drag.gesture()).toBeUndefined()
-    await press("subagents")
+    await press("custom:subagents")
     const empty = node("sidebar-bottom")
     await view.mockMouse.emitMouseEvent("drag", empty.x + 4, empty.y + 2)
     await view.mockMouse.release(empty.x + 4, empty.y + 2)
     await view.flush()
-    expect(controller.activeBottom()).toBe("subagents")
+    expect(controller.activeBottom()).toBe("custom:subagents")
     await controller.place("setup", "bottom")
     expect(controller.options().pins.setup).toBe("top")
     await controller.pin("setup", false)
     expect(controller.options().pins.setup).toBe("top")
-    await controller.place("subagents", false)
-    expect(controller.layout().scroll.some((card) => card.id === "subagents")).toBe(true)
+    await controller.place("custom:subagents", false)
+    expect(controller.layout().scroll.some((card) => card.id === "custom:subagents")).toBe(true)
   } finally { view.renderer.destroy() }
 })

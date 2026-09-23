@@ -52,7 +52,8 @@ export type Theme = {
 }
 
 type Response<T> = {
-  location: Location & { project: { directory: string; canonical: string } }
+  // OpenCode 2.0.14 no longer includes project.
+  location: Location & { project?: { directory: string; canonical: string } }
   data: T
 }
 
@@ -125,7 +126,7 @@ export type TuiContext = {
       list(): readonly Session[]
       root(id: string): string | undefined
       family(id: string): readonly string[] | undefined
-      status(id: string): { type: string } | undefined
+      status(id: string): string | { type: string } | undefined
       cost?(id: string): number
       message?: { list(id: string): readonly SessionMessage[] | undefined }
     }

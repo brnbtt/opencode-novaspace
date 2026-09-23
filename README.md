@@ -6,10 +6,11 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/brnbtt/opencode-novaspace/blob/main/LICENSE)
 
 novaSpace replaces OpenCode's terminal sidebar with calm, rearrangeable cards. It
-shows your setup, your session and your subagents at a glance. It can also keep
+shows your setup and your session at a glance, and you can add cards of your own.
+It can also keep
 your OpenCode profile in sync across machines using a private GitHub repository.
 
-![novaSpace sidebar in an OpenCode session: profile card, subagent activity and session info](https://raw.githubusercontent.com/brnbtt/opencode-novaspace/main/docs/images/hero.png)
+![novaSpace sidebar in an OpenCode session: profile card, a custom subagents card and session info](https://raw.githubusercontent.com/brnbtt/opencode-novaspace/main/docs/images/hero.png)
 
 ## Why novaSpace
 
@@ -20,6 +21,8 @@ your OpenCode profile in sync across machines using a private GitHub repository.
   Credentials and machine-specific paths stay on each machine.
 - **Arrange the sidebar your way.** Drag cards to reorder them or pin them to the
   bottom. Your layout is saved.
+- **Add your own cards.** Write a small card module on your machine and novaSpace
+  shows it alongside the built-in cards.
 - **Fits in with your theme.** Cards use colours from your current OpenCode
   theme, so they look right in light and dark themes.
 
@@ -43,12 +46,8 @@ install it from **✧ novaSpace settings**.
 | **Profile & setup** | Your GitHub account and sync status, plus how many skills, instructions, plugins, MCP servers and subagents are active. **✧ novaSpace settings** opens your configuration files and profile sync. |
 | **Session info** | Context used, cost so far, and the current folder and branch. |
 
-Optional cards can be added in [Configuration](#configuration):
-
-| Card | ID | What it shows |
-| --- | --- | --- |
-| **Subagents** | `subagents` | Subagents the current session has started, with running, idle, succeeded and failed counts. |
-| **Working Set** | `working-set` | The project folder, branch and number of changed files, with an **Open in Zed** shortcut. |
+Anything else in the sidebar is a [custom card](#custom-cards) that you add
+yourself.
 
 ### Settings in one place
 
@@ -113,7 +112,7 @@ Drag the `⠿` grip next to a card's title to move it. A line shows where it wil
 land. Drop it at the bottom to pin it there. Several bottom cards become pages
 that you can switch with the dots underneath. Press **Esc** to cancel.
 
-![Dragging the Subagents card to pin it at the bottom of the sidebar](https://raw.githubusercontent.com/brnbtt/opencode-novaspace/main/docs/images/drag.png)
+![Dragging a custom Subagents card to pin it at the bottom of the sidebar](https://raw.githubusercontent.com/brnbtt/opencode-novaspace/main/docs/images/drag.png)
 
 Your layout survives restarts. The profile card always stays at the top.
 
@@ -128,8 +127,9 @@ layout, add an entry to `cli.json`:
     {
       "package": "opencode-novaspace",
       "options": {
-        "cards": ["setup", "subagents", "working-set", "session-info"],
-        "pins": { "setup": "top", "session-info": "bottom" }
+        "cards": ["setup", "custom:subagents", "session-info"],
+        "pins": { "setup": "top", "session-info": "bottom" },
+        "customCards": { "custom:subagents": "~/cards/subagents.js" }
       }
     }
   ]
@@ -143,7 +143,7 @@ layout, add an entry to `cli.json`:
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `cards` | `["setup", "session-info"]` | Cards to show, in order. |
+| `cards` | `["setup", "session-info"]`, then your custom cards | Cards to show, in order. |
 | `hidden` | `[]` | Cards to hide without removing them from `cards`. |
 | `pins` | setup `top`, session-info `bottom` | Set `"top"`, `"bottom"` or `false` for each card. |
 | `surfaceStrength` | `0.14` | How strongly card backgrounds stand out from the sidebar. |
@@ -151,9 +151,45 @@ layout, add an entry to `cli.json`:
 | `hoverStrength` | `0.08` | Background highlight when you hover over a card. |
 | `hoverDuration` | `120` | Hover animation length in milliseconds. |
 | `gap` | `1` | Blank rows between cards. |
+| `customCards` | `{}` | Your own cards: an ID starting with `custom:` mapped to an absolute or `~/` path. See [Custom cards](#custom-cards). |
 
 These options set the initial layout. After you rearrange cards by dragging, the
-saved layout is used instead.
+saved layout is used instead. A custom card you add later still joins the saved
+layout, at the end.
+
+## Custom cards
+
+A custom card is a JavaScript module on your machine. It default-exports the
+card's title and a `render` function:
+
+```js title="~/cards/hello.js"
+export default {
+  apiVersion: 1,
+  title: "Hello",
+  render({ chrome, ctx, drag, options, pin }) {
+    // Build the card with chrome.Card, chrome.CardTitle, chrome.CardAction,
+    // chrome.cardHeader and chrome.metricRow so it matches the built-in cards.
+  },
+}
+```
+
+Declare it under `customCards` with an ID that starts with `custom:`, lowercase
+letters, digits and dashes only. It then works like any other card: you can
+reorder, pin and hide it.
+
+`render` gets the same props as the built-in cards: `ctx` (the OpenCode plugin
+context, including `ctx.data` and `ctx.theme`), `sessionID`, `options`, `pin`,
+`drag` and `dragging`, plus `chrome`. Pass `drag` to `chrome.Card` and
+`chrome.CardTitle` to get the drag grip.
+
+Write the card with OpenTUI Solid JSX, then **compile it to JavaScript** before
+novaSpace loads it. The compiled file must import `@opentui/solid` and `solid-js`
+directly, so it uses the same runtime as OpenCode. Compile with
+`babel-preset-solid` using `{ moduleName: "@opentui/solid", generate: "universal" }`.
+Don't bundle those packages into the file.
+
+If a card can't be loaded, novaSpace skips it and shows a message. The rest of the
+sidebar still works.
 
 ## Troubleshooting
 
@@ -161,6 +197,11 @@ saved layout is used instead.
 - **Options have no effect.** Check they're in `cli.json`, not `opencode.json`.
   If you've rearranged cards, the saved layout is used instead of your `cards`
   order.
+- **A custom card doesn't appear.** Check that its ID starts with `custom:`, that
+  the path is absolute or starts with `~/`, and that the file is compiled
+  JavaScript. Restart OpenCode after changing `customCards`.
+- **Subagents, Working Set, Memory or Copilot cards disappeared after updating.**
+  From 0.4.0 these are no longer part of novaSpace. Add them back as custom cards.
 - **Sync says "Set up sync" or can't connect.** Run `gh auth status`. Sync uses
   the GitHub account that was signed in when you connected. If you've switched
   accounts, switch back or reconnect.

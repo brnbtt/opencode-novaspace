@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0
+
+- Add local custom cards. Declare compiled card modules under the `customCards`
+  option with `custom:` IDs; they get the same card frame, drag grip, pins and
+  saved layout as the built-in cards. A card that fails to load is skipped with a
+  message.
+- **Breaking:** remove the Subagents, Working Set, Memory and Copilot cards from
+  the package. novaSpace now ships only Profile & setup and Session info. Recreate
+  any of the removed cards as custom cards.
+
 ## 0.3.1
 
 - Rewrite the README for users, with screenshots of the sidebar, settings,

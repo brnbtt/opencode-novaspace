@@ -50,7 +50,7 @@ export function DragOverlay(props: { drag: SidebarDrag; ctx: TuiContext }) {
                 backgroundColor={cardSurface(props.ctx.theme, 0.25)} justifyContent="center" alignItems="center" paddingLeft={1} paddingRight={1}
               >
                 <text selectable={false} fg={props.ctx.theme.text.feedback.info.base}>{gesture().fromBottom
-                  ? destination().before ? `Move before ${cards()[destination().before!].title}` : "Move to the last bottom page"
+                  ? destination().before ? `Move before ${cards()[destination().before!]?.title ?? "card"}` : "Move to the last bottom page"
                   : "Add this card to the bottom"}</text>
                 <text selectable={false} fg={props.ctx.theme.text.muted}>{gesture().fromBottom ? "Release to reorder" : "Release to pin"}</text>
               </box>
