@@ -37,7 +37,7 @@ test("animates the card surface slightly on hover", async () => {
   }
 })
 
-test("keeps the card surface inside the border", async () => {
+test("frames the card surface flush with its border", async () => {
   const options = resolveOptions({})
   const view = await testRender(() => (
     <Card theme={theme} strength={options.surfaceStrength}>
@@ -45,7 +45,7 @@ test("keeps the card surface inside the border", async () => {
     </Card>
   ), { width: 20, height: 5 })
   try {
-    await view.waitForFrame((frame) => frame.includes("Inside"))
+    await view.waitForFrame((frame) => frame.includes("Inside") && frame.includes("▁"))
     const surface = cardSurface(theme, options.surfaceStrength).toInts().slice(0, 3)
     const lines = view.captureSpans().lines
     const bgAt = (row: number, column: number) => {
@@ -57,7 +57,13 @@ test("keeps the card surface inside the border", async () => {
       throw new Error(`no cell at ${row},${column}`)
     }
     expect(bgAt(1, 2)).toEqual(surface)
-    for (const [row, column] of [[0, 0], [0, 5], [1, 0], [1, 19], [2, 0], [2, 5]] as const) expect(bgAt(row, column)).not.toEqual(surface)
+    for (const [row, column] of [[0, 1], [0, 5], [0, 18], [2, 1], [2, 5], [2, 18]] as const) expect(bgAt(row, column)).toEqual(surface)
+    for (const row of [0, 1, 2]) for (const column of [0, 19]) expect(bgAt(row, column)).not.toEqual(surface)
+    const text = view.captureCharFrame().split("\n")
+    expect(text[0]).toBe(`▕${"▔".repeat(18)}▏`)
+    expect(text[1]!.startsWith("▕ Inside")).toBe(true)
+    expect(text[1]!.endsWith("▏")).toBe(true)
+    expect(text[2]).toBe(`▕${"▁".repeat(18)}▏`)
   } finally {
     view.renderer.destroy()
   }

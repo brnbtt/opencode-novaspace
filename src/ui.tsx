@@ -27,26 +27,29 @@ export function cardBorder(theme: Theme) {
 
 /** Text edges respect scroll clipping in both the host and test renderer. Native
  * drawBox borders bypass scissor clipping; buffered borders disappear in the host.
- * Edge glyphs sit mid-cell, so callers fill only the interior; filling the edge
- * cells would paint half a cell of surface outside the visible line. */
-export function roundedFrame(theme: () => Theme) {
+ * Box-drawing glyphs sit mid-cell, so any fill leaks past the line or leaves a gap
+ * inside it. Eighth blocks sit on cell edges instead: the side lines hug the
+ * interior from the outer columns, and the top/bottom lines cap filled rows. */
+export function cardFrame(theme: () => Theme, surface: () => RGBA) {
   let root: BoxRenderable | undefined
   const [size, setSize] = createSignal({ width: 0, height: 0 })
   const measure = () => { if (root) setSize({ width: root.width, height: root.height }) }
   onMount(measure)
+  const inner = () => Math.max(0, size().width - 2)
+  const side = (glyph: string) => Array(size().height).fill(glyph).join("\n")
   return {
     ref(value: BoxRenderable) { root = value }, measure,
     edges: () => <Show when={size().width >= 2 && size().height >= 2}>
-      <text position="absolute" left={0} top={0} height={1} width={size().width} zIndex={1} selectable={false} fg={cardBorder(theme())}>{`╭${"─".repeat(Math.max(0, size().width - 2))}╮`}</text>
-      <text position="absolute" left={0} bottom={0} height={1} width={size().width} zIndex={1} selectable={false} fg={cardBorder(theme())}>{`╰${"─".repeat(Math.max(0, size().width - 2))}╯`}</text>
-      <text position="absolute" left={0} top={1} width={1} height={Math.max(0, size().height - 2)} zIndex={1} selectable={false} fg={cardBorder(theme())}>{Array(Math.max(0, size().height - 2)).fill("│").join("\n")}</text>
-      <text position="absolute" right={0} top={1} width={1} height={Math.max(0, size().height - 2)} zIndex={1} selectable={false} fg={cardBorder(theme())}>{Array(Math.max(0, size().height - 2)).fill("│").join("\n")}</text>
+      <text position="absolute" left={1} top={0} height={1} width={inner()} zIndex={1} selectable={false} fg={cardBorder(theme())} bg={surface()}>{"▔".repeat(inner())}</text>
+      <text position="absolute" left={1} bottom={0} height={1} width={inner()} zIndex={1} selectable={false} fg={cardBorder(theme())} bg={surface()}>{"▁".repeat(inner())}</text>
+      <text position="absolute" left={0} top={0} width={1} height={size().height} zIndex={1} selectable={false} fg={cardBorder(theme())}>{side("▕")}</text>
+      <text position="absolute" right={0} top={0} width={1} height={size().height} zIndex={1} selectable={false} fg={cardBorder(theme())}>{side("▏")}</text>
     </Show>,
   }
 }
 
 export function Panel(props: { id?: string; theme: Theme; strength: number; marginBottom?: number; children: JSX.Element }) {
-  const frame = roundedFrame(() => props.theme)
+  const frame = cardFrame(() => props.theme, () => cardSurface(props.theme, props.strength))
   return <box id={props.id} ref={frame.ref} onSizeChange={frame.measure} flexDirection="column" padding={1} marginBottom={props.marginBottom}>
     <box flexDirection="column" paddingLeft={1} paddingRight={1} backgroundColor={cardSurface(props.theme, props.strength)}>{props.children}</box>
     {frame.edges()}
@@ -99,7 +102,6 @@ export function Card(props: {
   drag?: CardDragBinding
 }) {
   let root: BoxRenderable | undefined
-  const frame = roundedFrame(() => props.theme)
   createEffect(() => {
     const drag = props.drag
     if (root && drag) onCleanup(drag.manager.registerCard(drag.sessionID, drag.id, root))
@@ -122,6 +124,7 @@ export function Card(props: {
     onCleanup(() => clearInterval(timer))
   })
   const strength = () => Math.min(1, props.strength + (props.hoverStrength ?? 0.08) * progress())
+  const frame = cardFrame(() => props.theme, () => cardSurface(props.theme, strength()))
   const lifted = () => !!props.drag && props.drag.manager.gesture()?.id === props.drag.id
     && props.drag.manager.forSession(props.drag.sessionID) && props.drag.manager.gesture()?.moved
   return (

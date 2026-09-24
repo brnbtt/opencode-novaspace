@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2
+
+- Draw the card border on cell edges so the background meets the line on every
+  side. Mid-cell box-drawing characters either leaked half a cell of background
+  outside the line or, since 0.4.1, left a gap inside it. Card corners are now
+  square.
+
 ## 0.4.1
 
 - Keep the card background inside the rounded border. The surface filled the
