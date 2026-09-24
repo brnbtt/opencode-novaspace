@@ -37,6 +37,32 @@ test("animates the card surface slightly on hover", async () => {
   }
 })
 
+test("keeps the card surface inside the border", async () => {
+  const options = resolveOptions({})
+  const view = await testRender(() => (
+    <Card theme={theme} strength={options.surfaceStrength}>
+      <text>Inside</text>
+    </Card>
+  ), { width: 20, height: 5 })
+  try {
+    await view.waitForFrame((frame) => frame.includes("Inside"))
+    const surface = cardSurface(theme, options.surfaceStrength).toInts().slice(0, 3)
+    const lines = view.captureSpans().lines
+    const bgAt = (row: number, column: number) => {
+      let offset = 0
+      for (const span of lines[row]!.spans) {
+        if (column < offset + span.width) return span.bg.toInts().slice(0, 3)
+        offset += span.width
+      }
+      throw new Error(`no cell at ${row},${column}`)
+    }
+    expect(bgAt(1, 2)).toEqual(surface)
+    for (const [row, column] of [[0, 0], [0, 5], [1, 0], [1, 19], [2, 0], [2, 5]] as const) expect(bgAt(row, column)).not.toEqual(surface)
+  } finally {
+    view.renderer.destroy()
+  }
+})
+
 test("opens the compact setup hub from the main card", async () => {
   const syncHome = await mkdtemp(join(tmpdir(), "novaspace-ui-"))
   const syncEngine = new ProfileSync({ home: syncHome, config: join(syncHome, "config"), state: join(syncHome, "state") }, {

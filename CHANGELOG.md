@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1
+
+- Keep the card background inside the rounded border. The surface filled the
+  border cells too, so half a cell of background showed outside the line on
+  every side. Custom cards get the fix through the shared card chrome.
+
 ## 0.4.0
 
 - Add local custom cards. Declare compiled card modules under the `customCards`

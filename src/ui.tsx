@@ -26,7 +26,9 @@ export function cardBorder(theme: Theme) {
 }
 
 /** Text edges respect scroll clipping in both the host and test renderer. Native
- * drawBox borders bypass scissor clipping; buffered borders disappear in the host. */
+ * drawBox borders bypass scissor clipping; buffered borders disappear in the host.
+ * Edge glyphs sit mid-cell, so callers fill only the interior; filling the edge
+ * cells would paint half a cell of surface outside the visible line. */
 export function roundedFrame(theme: () => Theme) {
   let root: BoxRenderable | undefined
   const [size, setSize] = createSignal({ width: 0, height: 0 })
@@ -45,8 +47,8 @@ export function roundedFrame(theme: () => Theme) {
 
 export function Panel(props: { id?: string; theme: Theme; strength: number; marginBottom?: number; children: JSX.Element }) {
   const frame = roundedFrame(() => props.theme)
-  return <box id={props.id} ref={frame.ref} onSizeChange={frame.measure} flexDirection="column" padding={1} marginBottom={props.marginBottom} backgroundColor={cardSurface(props.theme, props.strength)}>
-    <box flexDirection="column" paddingLeft={1} paddingRight={1}>{props.children}</box>
+  return <box id={props.id} ref={frame.ref} onSizeChange={frame.measure} flexDirection="column" padding={1} marginBottom={props.marginBottom}>
+    <box flexDirection="column" paddingLeft={1} paddingRight={1} backgroundColor={cardSurface(props.theme, props.strength)}>{props.children}</box>
     {frame.edges()}
   </box>
 }
@@ -128,7 +130,6 @@ export function Card(props: {
       onSizeChange={frame.measure}
       id={props.drag ? `card-${props.drag.id}` : undefined}
       flexDirection="column"
-      backgroundColor={cardSurface(props.theme, strength())}
       padding={1}
       opacity={lifted() ? 0.35 : 1}
       marginBottom={props.marginBottom ?? 0}
