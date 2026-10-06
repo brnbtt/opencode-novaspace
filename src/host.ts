@@ -16,6 +16,35 @@ function length(value: Length): number | "auto" | `${number}%` {
   return "auto"
 }
 
+function accessor(target: object, key: string): PropertyDescriptor | undefined {
+  for (let proto = Object.getPrototypeOf(target); proto; proto = Object.getPrototypeOf(proto)) {
+    const descriptor = Object.getOwnPropertyDescriptor(proto, key)
+    if (descriptor) return descriptor
+  }
+  return undefined
+}
+
+// OpenCode paints the sidebar with background.raised.base and repaints it on
+// every theme change. Keep the sidebar transparent so the terminal background
+// shows between cards, which draw their own surfaces. The host assigns
+// backgroundColor as a plain property, so an instance accessor absorbs its
+// repaints and remembers the last one for disposal.
+function clearSidebarBackground(sidebar: Renderable): () => void {
+  const native = accessor(sidebar, "backgroundColor")
+  if (!native?.get || !native.set) return () => {}
+  let requested: unknown = native.get.call(sidebar)
+  Object.defineProperty(sidebar, "backgroundColor", {
+    configurable: true,
+    get: () => native.get!.call(sidebar),
+    set: (value: unknown) => { requested = value },
+  })
+  native.set.call(sidebar, "transparent")
+  return () => {
+    delete (sidebar as { backgroundColor?: unknown }).backgroundColor
+    if (!sidebar.isDestroyed) native.set!.call(sidebar, requested)
+  }
+}
+
 // OpenCode 2.0.7 mounts sidebar.content inside an unbounded native scrollbox.
 // Bound that wrapper so only our middle scrollbox scrolls. Slot APIs currently
 // expose no host layout options; keep this compatibility adjustment isolated,
@@ -49,8 +78,10 @@ export function fitSidebarHost(root: BoxRenderable, compactFooter: boolean): () 
   }
   host.verticalScrollBar.visible = false
   host.scrollTo(0)
+  const restoreBackground = clearSidebarBackground(sidebar)
 
   return () => {
+    restoreBackground()
     if (!host.isDestroyed) {
       host.content.height = previous.contentHeight
       host.verticalScrollBar.resetVisibilityControl()

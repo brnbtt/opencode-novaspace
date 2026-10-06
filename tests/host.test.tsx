@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
-import { onCleanup, onMount } from "solid-js"
-import type { BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
+import { createSignal, onCleanup, onMount } from "solid-js"
+import { RGBA, type BoxRenderable, type ScrollBoxRenderable } from "@opentui/core"
 import { Divider, nativeScrollbar } from "../src/ui"
 import { fitSidebarHost } from "../src/host"
 import { theme } from "./support"
@@ -66,6 +66,42 @@ test("bounds the native sidebar host, keeps pins fixed, and restores host spacin
     await view.flush()
     expect(line("PINNED PROFILE")).toBe(top + 1)
     expect(line("PINNED COPILOT")).toBe(24)
+  } finally {
+    view.renderer.destroy()
+  }
+})
+
+test("keeps the native sidebar transparent across theme repaints and restores it", async () => {
+  let sidebar: BoxRenderable | undefined
+  let root: BoxRenderable | undefined
+  let restore: (() => void) | undefined
+  const [raised, setRaised] = createSignal("#202030")
+  function Content() {
+    onMount(() => { restore = fitSidebarHost(root!, true) })
+    onCleanup(() => restore?.())
+    return <box ref={(value) => { root = value }} height="100%" flexGrow={1}><text>CARDS</text></box>
+  }
+  const view = await testRender(() => (
+    <box ref={(value) => { sidebar = value }} width={42} height="100%" backgroundColor={raised()}>
+      <box flexShrink={0}><text>SESSION TITLE</text></box>
+      <scrollbox flexGrow={1} minHeight={0} horizontalScrollbarOptions={{ visible: false }}>
+        <box flexShrink={0}><Content /></box>
+      </scrollbox>
+      <box flexShrink={0}><text>FOOTER</text></box>
+    </box>
+  ), { width: 42, height: 20 })
+  try {
+    await view.waitForFrame((frame) => frame.includes("CARDS"))
+    expect(sidebar!.backgroundColor.a).toBe(0)
+    setRaised("#304050")
+    await view.flush()
+    expect(sidebar!.backgroundColor.a).toBe(0)
+    restore?.()
+    restore = undefined
+    expect(sidebar!.backgroundColor.equals(RGBA.fromHex("#304050"))).toBe(true)
+    setRaised("#405060")
+    await view.flush()
+    expect(sidebar!.backgroundColor.equals(RGBA.fromHex("#405060"))).toBe(true)
   } finally {
     view.renderer.destroy()
   }

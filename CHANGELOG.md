@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.3
+
+- Remove the sidebar's solid background. OpenCode paints the sidebar with the
+  theme's raised surface; novaSpace now keeps it transparent, including after
+  theme changes, so the terminal background shows between the cards. Cards keep
+  their own surfaces. Disabling novaSpace restores OpenCode's background.
+
 ## 0.4.2
 
 - Draw the card border on cell edges so the background meets the line on every
