@@ -1,4 +1,5 @@
 import { readdir, stat } from "node:fs/promises"
+import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import type { Location, TuiContext } from "../../types"
 
@@ -196,8 +197,8 @@ export async function loadSetupInventory(ctx: TuiContext, options: { home?: stri
   ])
   const plugins = pluginResult.status === "fulfilled" ? pluginResult.value?.data ?? [] : []
   const configs = configResult.status === "fulfilled" ? configResult.value?.data ?? [] : []
-  const home = options.home ?? process.env.HOME
-  const globalConfigFolder = home ? join(options.home ? join(home, ".config") : process.env.XDG_CONFIG_HOME ?? join(home, ".config"), "opencode") : undefined
+  const home = options.home ?? process.env.HOME ?? homedir()
+  const globalConfigFolder = join(options.home ? join(home, ".config") : process.env.XDG_CONFIG_HOME ?? join(home, ".config"), "opencode")
   const documentPaths = configs
     .filter((config) => config.type === "document" && config.path)
     .map((config) => config.path!)

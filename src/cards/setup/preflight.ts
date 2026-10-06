@@ -1,4 +1,5 @@
 import { readdir, readFile, stat } from "node:fs/promises"
+import { homedir } from "node:os"
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import type { Location, TuiContext } from "../../types"
 
@@ -118,8 +119,8 @@ async function inspectPortableConfig(path: string, warnings: PreflightPath[], bl
 }
 
 export async function loadStandardizationPreflight(ctx: TuiContext): Promise<StandardizationPreflight> {
-  const home = process.env.HOME
-  const root = join(process.env.XDG_CONFIG_HOME ?? (home ? join(home, ".config") : ".config"), "opencode")
+  const home = process.env.HOME ?? homedir()
+  const root = join(process.env.XDG_CONFIG_HOME ?? join(home, ".config"), "opencode")
   const ready: PreflightPath[] = []
   const warnings: PreflightPath[] = []
   const blockers: PreflightPath[] = []
@@ -140,18 +141,16 @@ export async function loadStandardizationPreflight(ctx: TuiContext): Promise<Sta
     if (await pathKind(path)) ready.push({ name, path })
   }
 
-  if (home) {
-    for (const from of [join(home, ".agents/skills"), join(home, ".claude/skills")]) {
-      if (await pathKind(from) !== "folder") continue
-      const to = join(root, "skills")
-      const targetExists = await pathKind(to) === "folder"
-      moves.push({
-        from,
-        to,
-        files: await countFiles(from),
-        detail: targetExists ? "Merge review required; canonical skills folder already exists" : "Move into OpenCode's canonical global skills folder",
-      })
-    }
+  for (const from of [join(home, ".agents/skills"), join(home, ".claude/skills")]) {
+    if (await pathKind(from) !== "folder") continue
+    const to = join(root, "skills")
+    const targetExists = await pathKind(to) === "folder"
+    moves.push({
+      from,
+      to,
+      files: await countFiles(from),
+      detail: targetExists ? "Merge review required; canonical skills folder already exists" : "Move into OpenCode's canonical global skills folder",
+    })
   }
 
   const service = join(root, "service.json")

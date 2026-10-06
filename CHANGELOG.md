@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.4
+
+- Find the global `AGENTS.md`, settings and skills folders on Windows. The setup
+  inventory and preflight read the home folder only from `HOME`, which Windows
+  does not set, so Profile & setup showed 0 instructions there. They now fall
+  back to the operating system's home folder, as profile sync already did.
+
 ## 0.4.3
 
 - Remove the sidebar's solid background. OpenCode paints the sidebar with the
