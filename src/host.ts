@@ -10,10 +10,34 @@ function isScrollBox(value: Renderable): value is ScrollBoxRenderable {
 }
 
 type Length = { unit: number; value: number }
-function length(value: Length): number | "auto" | `${number}%` {
-  if (value.unit === Yoga.UNIT_PERCENT) return `${value.value}%`
-  if (value.unit === Yoga.UNIT_POINT) return value.value
+type Edge = typeof Yoga.EDGE_TOP | typeof Yoga.EDGE_RIGHT | typeof Yoga.EDGE_BOTTOM | typeof Yoga.EDGE_LEFT
+type StyledRenderable = Renderable & {
+  getHeight?: () => Length
+  getPadding?: (edge: Edge) => Length
+  getLayoutNode?: () => {
+    getHeight(): Length
+    getPadding(edge: Edge): Length
+    setPadding?(edge: Edge, padding: number | `${number}%` | undefined): void
+  }
+}
+
+function length(value: Length | undefined): number | "auto" | `${number}%` {
+  if (value?.unit === Yoga.UNIT_PERCENT) return `${value.value}%`
+  if (value?.unit === Yoga.UNIT_POINT) return value.value
   return "auto"
+}
+
+function getHeight(box: Renderable): number | "auto" | `${number}%` {
+  const styled = box as StyledRenderable
+  return length(styled.getHeight?.() ?? styled.getLayoutNode?.().getHeight())
+}
+
+function getPadding(box: Renderable, edge: Edge): number | `${number}%` | undefined {
+  const styled = box as StyledRenderable
+  const value = styled.getPadding?.(edge) ?? styled.getLayoutNode?.().getPadding(edge)
+  if (value?.unit === Yoga.UNIT_PERCENT) return `${value.value}%`
+  if (value?.unit === Yoga.UNIT_POINT) return value.value
+  return undefined
 }
 
 function accessor(target: object, key: string): PropertyDescriptor | undefined {
@@ -61,12 +85,12 @@ export function fitSidebarHost(root: BoxRenderable, compactFooter: boolean): () 
   if (body !== host || !title || !footer || sidebar.getChildren().length !== 3) return () => {}
 
   const previous = {
-    contentHeight: length(host.content.getLayoutNode().getHeight()),
-    slotHeight: length(slot.getLayoutNode().getHeight()),
-    slotPadding: slot.getLayoutNode().getPadding(Yoga.EDGE_RIGHT).value,
-    titlePadding: title.getLayoutNode().getPadding(Yoga.EDGE_BOTTOM).value,
-    footerPadding: footer.getLayoutNode().getPadding(Yoga.EDGE_TOP).value,
-    bottomPadding: sidebar.getLayoutNode().getPadding(Yoga.EDGE_BOTTOM).value,
+    contentHeight: getHeight(host.content),
+    slotHeight: getHeight(slot),
+    slotPadding: getPadding(slot, Yoga.EDGE_RIGHT),
+    titlePadding: getPadding(title, Yoga.EDGE_BOTTOM),
+    footerPadding: getPadding(footer, Yoga.EDGE_TOP),
+    bottomPadding: getPadding(sidebar, Yoga.EDGE_BOTTOM),
   }
   host.content.height = "100%"
   slot.height = "100%"
