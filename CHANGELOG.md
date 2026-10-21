@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.5
+
+- Fix the sidebar crash on OpenCode 2.1.2 (`host.content.getLayoutNode is not a
+  function`). Its OpenTUI moved layout into the native scene and removed
+  `getLayoutNode()`; the sidebar host adapter now reads height and padding from
+  the renderable itself and still uses `getLayoutNode()` on older OpenCode.
+
 ## 0.4.4
 
 - Find the global `AGENTS.md`, settings and skills folders on Windows. The setup

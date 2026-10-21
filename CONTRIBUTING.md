@@ -244,7 +244,9 @@ checks the renderable hierarchy before applying changes and restores the host
 styles on disposal. Bottom padding is removed so the footer reaches the sidebar's
 lower edge. Recheck this adapter when upgrading OpenCode. It uses structural
 checks because the live host and plugins can load separate OpenTUI modules, making
-`instanceof ScrollBoxRenderable` fail across that boundary.
+`instanceof ScrollBoxRenderable` fail across that boundary. OpenCode 2.1.2 ships
+OpenTUI 0.6, which removed `Renderable.getLayoutNode()`; the adapter reads Yoga
+style values through `layout()`, which supports both versions.
 
 Reactive state lives in `drag.tsx` and `layout.tsx`; their `.ts` files are stable
 re-export entrypoints. OpenCode 2.0.7 rewrites Solid imports through its JSX

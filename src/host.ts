@@ -10,6 +10,14 @@ function isScrollBox(value: Renderable): value is ScrollBoxRenderable {
 }
 
 type Length = { unit: number; value: number }
+type LayoutReader = { getHeight(): Length; getPadding(edge: number): Length }
+
+// OpenTUI 0.6 (OpenCode 2.1.2) moved layout into the native scene and removed
+// getLayoutNode(); the Yoga style getters now live on the renderable itself.
+function layout(node: Renderable): LayoutReader {
+  const legacy = node as unknown as { getLayoutNode?: () => LayoutReader }
+  return typeof legacy.getLayoutNode === "function" ? legacy.getLayoutNode() : node as unknown as LayoutReader
+}
 function length(value: Length): number | "auto" | `${number}%` {
   if (value.unit === Yoga.UNIT_PERCENT) return `${value.value}%`
   if (value.unit === Yoga.UNIT_POINT) return value.value
@@ -61,12 +69,12 @@ export function fitSidebarHost(root: BoxRenderable, compactFooter: boolean): () 
   if (body !== host || !title || !footer || sidebar.getChildren().length !== 3) return () => {}
 
   const previous = {
-    contentHeight: length(host.content.getLayoutNode().getHeight()),
-    slotHeight: length(slot.getLayoutNode().getHeight()),
-    slotPadding: slot.getLayoutNode().getPadding(Yoga.EDGE_RIGHT).value,
-    titlePadding: title.getLayoutNode().getPadding(Yoga.EDGE_BOTTOM).value,
-    footerPadding: footer.getLayoutNode().getPadding(Yoga.EDGE_TOP).value,
-    bottomPadding: sidebar.getLayoutNode().getPadding(Yoga.EDGE_BOTTOM).value,
+    contentHeight: length(layout(host.content).getHeight()),
+    slotHeight: length(layout(slot).getHeight()),
+    slotPadding: layout(slot).getPadding(Yoga.EDGE_RIGHT).value,
+    titlePadding: layout(title).getPadding(Yoga.EDGE_BOTTOM).value,
+    footerPadding: layout(footer).getPadding(Yoga.EDGE_TOP).value,
+    bottomPadding: layout(sidebar).getPadding(Yoga.EDGE_BOTTOM).value,
   }
   host.content.height = "100%"
   slot.height = "100%"
