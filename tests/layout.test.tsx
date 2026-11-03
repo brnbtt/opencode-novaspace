@@ -124,14 +124,15 @@ test("the arrangement lives in the synced layout file while the selected page st
   const root = await mkdtemp(join(tmpdir(), "novaspace-layout-")); temporary.push(root)
   const path = join(root, "layout.json")
   const ctx = context()
-  const local: LayoutPreferences = { cards: ["account", "custom:copilot", "custom:subagents", "session-info"], pins: { "custom:copilot": "bottom" } }
+  const local = { cards: ["setup", "custom:copilot", "custom:subagents", "session-info"], pins: { setup: "top", "custom:copilot": "bottom" } } as unknown as LayoutPreferences
   ctx.storage = storage(local)
   let file!: ReturnType<typeof createLayoutFile>
   let dispose!: () => void
   const controller = createRoot((cleanup) => { dispose = cleanup; return createLayoutController(ctx, (seed) => (file = createLayoutFile(path, seed, { poll: 60_000 })).store) })
   try {
     // An arrangement saved before 0.5.0 seeds the file once.
-    expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ version: 1, cards: ["account", "custom:copilot", "custom:subagents", "session-info"], pins: { "custom:copilot": "bottom" } })
+    // Legacy IDs are normalized on the way in.
+    expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ version: 1, cards: ["account", "custom:copilot", "custom:subagents", "session-info"], pins: { account: "top", "custom:copilot": "bottom" } })
     expect(controller.layout().bottom.map((card) => card.id)).toEqual(["custom:copilot", "session-info"])
     await controller.pin("custom:subagents", "bottom")
     const saved = JSON.parse(await readFile(path, "utf8"))

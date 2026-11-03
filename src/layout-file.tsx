@@ -38,9 +38,11 @@ function write(path: string, layout: SharedLayout) {
  */
 export function createLayoutFile(path: string, seed: SharedLayout = {}, options: { poll?: number } = {}) {
   const existing = read(path)
-  const [state, setState] = createStore<SharedLayout>(existing ?? structuredClone(seed))
-  if (!existing && (seed.cards || seed.pins || seed.hidden)) {
-    try { write(path, seed) } catch { /* Saved again on the next edit. */ }
+  // The seed comes from 0.4.x storage and can hold legacy IDs such as "setup".
+  const seeded = parse(JSON.stringify({ version: 1, ...seed }))!
+  const [state, setState] = createStore<SharedLayout>(existing ?? seeded)
+  if (!existing && (seeded.cards || seeded.pins || seeded.hidden)) {
+    try { write(path, seeded) } catch { /* Saved again on the next edit. */ }
   }
   let seen = stamp(path)
   const reload = (force = false) => {
