@@ -2,6 +2,7 @@
 import { For, Show } from "solid-js"
 import { RGBA, StyledText, type BoxOptions, type BoxRenderable, type Renderable, type TextOptions, type TextRenderable } from "@opentui/core"
 import type { Theme } from "./types"
+import { cardSurface } from "./ui"
 
 type Geometry = { x: number; y: number; width: number; height: number; opacity: number }
 type PaintLayer = Geometry & (
@@ -13,12 +14,14 @@ export type CardSnapshot = { width: number; height: number; grabX: number; grabY
 // Capture the already-mounted card's public paint properties. This preserves
 // expanded content, wrapping, and styled spans without mounting another card
 // (and starting its fetches/timers again) or moving the original out of its slot.
+// Cards have no frame of their own, so the snapshot adds a one-cell margin on
+// every side for the floating preview's border.
 export function snapshotCard(root: BoxRenderable, x: number, y: number): CardSnapshot {
   const layers: PaintLayer[] = []
   function visit(node: Renderable, inheritedOpacity: number) {
     if (!node.visible || node.isDestroyed || node.width < 1 || node.height < 1) return
     const geometry = {
-      x: node.x - root.x, y: node.y - root.y, width: node.width, height: node.height,
+      x: node.x - root.x + 1, y: node.y - root.y + 1, width: node.width, height: node.height,
       opacity: inheritedOpacity * node.opacity,
     }
     // The live host can use a different OpenTUI module; avoid instanceof checks.
@@ -43,14 +46,14 @@ export function snapshotCard(root: BoxRenderable, x: number, y: number): CardSna
     for (const child of node.getChildren().toSorted((a, b) => a.zIndex - b.zIndex)) visit(child, geometry.opacity)
   }
   visit(root, 1)
-  return { width: root.width, height: root.height, grabX: x - root.x, grabY: y - root.y, layers }
+  return { width: root.width + 2, height: root.height + 2, grabX: x - root.x + 1, grabY: y - root.y + 1, layers }
 }
 
 export function FloatingCard(props: { snapshot: CardSnapshot; theme: Theme; left: number; top: number; width: number; height: number }) {
   return (
     <box id="sidebar-drag-preview" position="absolute" left={props.left} top={props.top} width={props.width} height={props.height} zIndex={2}>
       <box position="absolute" left={1} top={1} width="100%" height="100%" backgroundColor={RGBA.fromInts(0, 0, 0, 90)} />
-      <box position="absolute" left={0} top={0} width="100%" height="100%" overflow="hidden">
+      <box position="absolute" left={0} top={0} width="100%" height="100%" overflow="hidden" backgroundColor={cardSurface(props.theme, 0.2)}>
         <For each={props.snapshot.layers}>{(layer) => (
           <Show when={layer.kind === "text"} fallback={
             <box

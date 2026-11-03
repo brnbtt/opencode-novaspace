@@ -1,11 +1,12 @@
 /** @jsxImportSource @opentui/solid */
+import type { ScrollBoxRenderable } from "@opentui/core"
 import { createMemo, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js"
-import type { TuiContext } from "../../types"
-import { cardBorder, faint, nativeScrollbar, novaMark, toneColor, useHostDimensions } from "../../ui"
-import { ActionLink, DialogActions, displayPath, openPath } from "../../dialog"
-import { customCards } from "../registry"
-import { cardSync, type CardSync, type SyncState } from "../../sync/engine"
-import { applyUpdate, checkForUpdate, installedVersion, loadUpdateState, updateSummary, type UpdateState } from "../../update"
+import type { TuiContext } from "../types"
+import { accent, Card, cardBorder, faint, gradient, nativeScrollbar, novaMark, toneColor, useHostDimensions } from "../ui"
+import { ActionLink, DialogActions, displayPath, openPath } from "../dialog"
+import { customCards } from "../cards/registry"
+import { cardSync, type CardSync, type SyncState } from "../sync/engine"
+import { applyUpdate, checkForUpdate, installedVersion, loadUpdateState, updateSummary, type UpdateState } from "../update"
 import { relativeTime, syncBadge } from "./status"
 
 export type UpdateHooks = {
@@ -23,15 +24,22 @@ export type AccountDialogProps = {
   update?: UpdateHooks
 }
 
-function Section(props: { ctx: TuiContext; title: string; aside?: () => JSX.Element; children: JSX.Element }) {
+function Section(props: { ctx: TuiContext; title: string; icon: string; aside?: () => JSX.Element; children: JSX.Element }) {
   return (
-    <box flexDirection="column" flexShrink={0}>
-      <box flexDirection="row" justifyContent="space-between" height={1}>
-        <text selectable={false} fg={props.ctx.theme.text.muted}><b>{props.title}</b></text>
-        {props.aside?.()}
-      </box>
+    <Card theme={props.ctx.theme} title={props.title} icon={props.icon} hoverStrength={0} meta={props.aside?.()}>
       {props.children}
-    </box>
+    </Card>
+  )
+}
+
+/** The wordmark, each letter a step along the accent gradient. */
+function Wordmark(props: { ctx: TuiContext }) {
+  const word = "novaSpace"
+  const colors = () => gradient(accent(props.ctx.theme), props.ctx.theme.text.base, word.length)
+  return (
+    <text selectable={false}>
+      <b>{word.split("").map((letter, index) => <span style={{ fg: colors()[index] }}>{letter}</span>)}</b>
+    </text>
   )
 }
 
@@ -49,6 +57,9 @@ export function AccountDialog(props: AccountDialogProps) {
   const [now, setNow] = createSignal(Date.now())
   let disposed = false
   let applying = false
+  let scroll: ScrollBoxRenderable | undefined
+  const [overflow, setOverflow] = createSignal(false)
+  const measure = () => { if (scroll && !scroll.isDestroyed) setOverflow(scroll.scrollHeight > scroll.viewport.height) }
 
   const refresh = () => engine.state().then((value) => { if (!disposed) setState(value) }).catch(() => {})
   const settle = (value: UpdateState) => { if (!disposed && !applying) setUpdate(value) }
@@ -112,7 +123,8 @@ export function AccountDialog(props: AccountDialogProps) {
   }
   const height = () => {
     const sync = !props.login ? 3 : !connected() ? 4 : 3 + (notice() ? 3 : 0) + (state()?.status === "conflict" ? 2 : 0)
-    return Math.min(16 + sync + (error() && !connected() ? 3 : 0), Math.max(12, dimensions().height - 4))
+    // Each section tile adds a cap row above and below its content.
+    return Math.min(22 + sync + (error() && !connected() ? 3 : 0), Math.max(12, dimensions().height - 4))
   }
 
   return (
@@ -121,22 +133,22 @@ export function AccountDialog(props: AccountDialogProps) {
         paddingLeft={3} paddingRight={3} paddingTop={1} paddingBottom={1} backgroundColor={theme().background.base}>
         <box flexDirection="row" justifyContent="space-between" flexShrink={0} height={1}>
           <box flexDirection="row" gap={1}>
-            <text selectable={false} fg={theme().text.feedback.info.base}>{novaMark}</text>
-            <text selectable={false} fg={theme().text.base}><b>novaSpace</b></text>
+            <text selectable={false} fg={accent(theme())}>{novaMark}</text>
+            <Wordmark ctx={props.ctx} />
           </box>
           <text selectable={false} fg={faint(theme())}>{installedVersion(update()) ? `v${installedVersion(update())}` : ""}</text>
         </box>
         <text selectable={false} flexShrink={0} fg={theme().text.muted}>Your sidebar cards, on every machine.</text>
-        <scrollbox id="novaspace-dialog-scroll" flexGrow={1} minHeight={1} marginTop={1}
+        <scrollbox id="novaspace-dialog-scroll" ref={(value) => { scroll = value }} onSizeChange={measure} flexGrow={1} minHeight={1} marginTop={1}
           horizontalScrollbarOptions={{ visible: false }}
-          verticalScrollbarOptions={{ ...nativeScrollbar(theme()), position: "absolute", right: 0, top: 0, height: "100%" }}>
-          <box flexDirection="column" gap={1} paddingRight={2}>
-            <Section ctx={props.ctx} title="CARDS" aside={() => <box marginRight={-1}><ActionLink id="cards-open" ctx={props.ctx} label="Open folder ↗" onPress={openCards} /></box>}>
+          verticalScrollbarOptions={{ ...nativeScrollbar(theme(), overflow()), position: "absolute", right: 0, top: 0, height: "100%" }}>
+          <box flexDirection="column" gap={1} paddingRight={2} onSizeChange={measure}>
+            <Section ctx={props.ctx} title="Cards" icon="▦" aside={() => <box marginRight={-1}><ActionLink id="cards-open" ctx={props.ctx} label="Open folder ↗" onPress={openCards} /></box>}>
               <text fg={theme().text.base} wrapMode="none" truncate>{displayPath(props.ctx, props.cardsDirectory)}</text>
               <text fg={theme().text.muted} wrapMode="word">{titles().length ? titles().join(" · ") : "No cards yet. Add a folder with an index.js."}</text>
             </Section>
 
-            <Section ctx={props.ctx} title="SYNC" aside={() => (
+            <Section ctx={props.ctx} title="Sync" icon="⇅" aside={() => (
               <text id="sync-badge" selectable={false} fg={toneColor(theme(), badge().tone)}>{busy() ? "◌ Working…" : `${badge().glyph} ${badge().label}`}</text>
             )}>
               <Show when={props.login} fallback={
@@ -186,7 +198,7 @@ export function AccountDialog(props: AccountDialogProps) {
               </Show>
             </Section>
 
-            <Section ctx={props.ctx} title="UPDATES" aside={() => (
+            <Section ctx={props.ctx} title="Updates" icon="↑" aside={() => (
               <Show when={updateSummary(update()).action}>{(label) => <box marginRight={-1}><ActionLink id="update-apply" ctx={props.ctx} label={label()} onPress={runUpdate} /></box>}</Show>
             )}>
               <text id="update-status" selectable={false} wrapMode="none" truncate fg={update().status === "error" ? theme().text.feedback.error.base : theme().text.muted}>{updateSummary(update()).label}</text>

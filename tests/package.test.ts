@@ -14,7 +14,8 @@ test("ships only the built-in cards and no profile sync", async () => {
   const root = new URL("../src/cards", import.meta.url).pathname
   const folders = new Set<string>()
   for await (const file of new Bun.Glob("*/index.tsx").scan({ cwd: root })) folders.add(file.split("/")[0]!)
-  expect([...folders].sort()).toEqual(["account", "session-info"])
+  // Every card is a custom card; the frame (header, account line) is not a card.
+  expect([...folders]).toEqual([])
   const manifest = await Bun.file(new URL("../package.json", import.meta.url)).json()
   expect(manifest.dependencies ?? {}).toEqual({})
   const source = new URL("../src", import.meta.url).pathname
@@ -46,7 +47,7 @@ test("uses OpenCode V2 resolved theme tokens", async () => {
 
 test("uses the host renderer for installed-package dimensions", async () => {
   const root = new URL("../src", import.meta.url).pathname
-  const consumers = ["carousel.tsx", "drag-overlay.tsx", "cards/account/dialog.tsx"]
+  const consumers = ["carousel.tsx", "drag-overlay.tsx", "account/dialog.tsx"]
   for (const file of consumers) {
     const source = await Bun.file(`${root}/${file}`).text()
     expect(source).toContain("useHostDimensions")

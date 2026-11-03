@@ -31,16 +31,24 @@ export type SessionMessage = {
   tokens?: Session["tokens"]
 }
 
+export type HueScale = Partial<Record<"100" | "200" | "300" | "400" | "500" | "600" | "700" | "800" | "900", Color>>
+
 export type Theme = {
   border?: { base: Color }
   scrollbar?: { base: Color }
+  /** Nine-step scales; steps follow the mode's contrast, so 800 is always a soft tint. */
+  hue?: Partial<Record<string, HueScale>>
+  /** Ordered hues for telling repeated items apart. */
+  categorical?: HueScale[]
   background: {
     base: Color
+    raised?: { base: Color; high: Color; max: Color }
     action: { primary: { hovered: Color } }
   }
   text: {
     base: Color
     muted: Color
+    faint?: Color
     action: { primary: { hovered: Color } }
     feedback: {
       info: { base: Color }
@@ -92,6 +100,7 @@ export type TuiContext = {
       status(id: string): string | { type: string } | undefined
       cost?(id: string): number
       message?: { list(id: string): readonly SessionMessage[] | undefined }
+      permission?: { list(id: string): readonly unknown[] | undefined }
     }
   }
   theme: Theme

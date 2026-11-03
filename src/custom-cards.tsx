@@ -7,11 +7,11 @@ import type { CardProps } from "./card"
 import { isCustomCardName, type CustomCardID } from "./config"
 import { registerCustomCard } from "./cards/registry"
 import type { TuiContext } from "./types"
-import { Card, CardAction, CardTitle, Meter, cardHeader, metricRow } from "./ui"
+import { Card, CardAction, CardTitle, Empty, Item, Meter, Pill, Stat, cardHeader, metricRow } from "./ui"
 
-// Shared card chrome handed to custom cards so they match built-in cards
-// without importing novaSpace internals.
-export const cardChrome = { Card, CardAction, CardTitle, Meter, cardHeader, metricRow }
+// The baseline kit handed to custom cards, so a card built from it looks at
+// home in the sidebar without importing novaSpace internals.
+export const cardChrome = { Card, CardAction, CardTitle, Empty, Item, Meter, Pill, Stat, cardHeader, metricRow }
 export type CardChrome = typeof cardChrome
 export type CustomCardProps = CardProps & { chrome: CardChrome }
 export type CustomCardModule = {

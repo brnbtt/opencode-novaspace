@@ -4,14 +4,14 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { JSX } from "solid-js"
-import { parseColor } from "@opentui/core"
 import { resolveOptions } from "../src/config"
-import { Card, cardBorder, cardSurface, Meter } from "../src/ui"
-import { AccountCard } from "../src/cards/account/index"
-import { AccountDialog } from "../src/cards/account/dialog"
-import { relativeTime, summary, syncBadge } from "../src/cards/account/status"
+import { parseColor } from "@opentui/core"
+import { Card, Empty, identity, Item, Meter, mix, Pill, Stat } from "../src/ui"
+import { AccountLine } from "../src/account/line"
+import { AccountDialog } from "../src/account/dialog"
+import { relativeTime, syncBadge } from "../src/account/status"
 import type { UpdateState } from "../src/update"
-import { latestContext, SessionInfoCard } from "../src/cards/session-info/index"
+import { compact, latestContext, SessionHeader, sessionActivity } from "../src/header"
 import { pathsIn } from "../src/paths"
 import { CardSync } from "../src/sync/engine"
 import type { Snapshot } from "../src/sync/files"
@@ -62,71 +62,116 @@ function bg(view: Awaited<ReturnType<typeof testRender>>, row: number, column: n
   throw new Error(`no cell at ${row},${column}`)
 }
 
-test("cards are an elevated surface with a single left edge that lights up on hover", async () => {
-  const options = resolveOptions({ hoverDuration: 40, hoverStrength: 0.1 })
-  const view = await testRender(() => (
-    <Card theme={theme} strength={options.surfaceStrength} hoverStrength={options.hoverStrength} hoverDuration={options.hoverDuration} onPress={() => {}}>
-      <text>Inside</text>
-    </Card>
-  ), { width: 20, height: 5 })
-  try {
-    await view.waitForFrame((frame) => frame.includes("Inside") && frame.includes("▎"))
-    const surface = cardSurface(theme, options.surfaceStrength).toInts().slice(0, 3)
-    const lines = view.captureCharFrame().split("\n")
-    expect(lines.slice(0, 3)).toEqual(["▎".padEnd(20), "▎ Inside".padEnd(20), "▎".padEnd(20)])
-    // The fill reaches every edge: no box border, no gap around the content.
-    for (const [row, column] of [[0, 0], [0, 19], [1, 2], [2, 10], [2, 19]] as const) expect(bg(view, row, column).bg).toEqual(surface)
-    expect(bg(view, 1, 0).fg).toEqual(parseColor(cardBorder(theme)).toInts().slice(0, 3))
+const light = {
+  ...theme,
+  background: { ...theme.background, raised: { base: "#203040", high: "#304050", max: "#405060" } },
+  hue: { green: { "200": "#00aa55", "500": "#008844", "800": "#003322" }, red: { "200": "#ff4444", "500": "#aa3333", "800": "#330000" } },
+  categorical: [{ "200": "#ff00ff", "800": "#220022" }, { "200": "#00ffff", "800": "#002222" }],
+}
+const ints = (color: Parameters<typeof parseColor>[0]) => parseColor(color).toInts().slice(0, 3)
 
-    await view.mockMouse.moveTo(4, 1)
+test("cards are flat tiles like the prompt box: a coloured edge, padding rows, a header from props, and a hover lift", async () => {
+  const options = resolveOptions({ hoverDuration: 40 })
+  const view = await testRender(() => (
+    <box width={24}>
+      <Card theme={light} title="Hello" icon="◆" meta="3" hoverDuration={options.hoverDuration}>
+        <text>Inside</text>
+      </Card>
+    </box>
+  ), { width: 24, height: 5 })
+  try {
+    await view.renderOnce()
+    await view.renderOnce()
+    const lines = view.captureCharFrame().split("\n")
+    expect(lines[0]).toBe("┃".padEnd(24))
+    expect(lines[1]).toMatch(/^┃  ◆ Hello +3  $/)
+    expect(lines[2]).toBe("┃  Inside".padEnd(24))
+    expect(lines[3]).toBe("┃".padEnd(24))
+    // A flat raised surface with square corners, and the edge in the card's own colour.
+    for (const row of [0, 1, 3]) expect(bg(view, row, 12).bg).toEqual(ints("#203040"))
+    expect(bg(view, 1, 0).fg).toEqual(ints(identity(light, undefined)["200"]))
+
+    await view.mockMouse.moveTo(5, 2)
     await Bun.sleep(70)
-    await view.flush()
-    expect(bg(view, 1, 4).bg).toEqual(cardSurface(theme, options.surfaceStrength + options.hoverStrength).toInts().slice(0, 3))
-    expect(bg(view, 1, 0).fg).toEqual([0, 170, 255])
+    await view.renderOnce()
+    expect(bg(view, 1, 12).bg).toEqual(ints("#304050"))
   } finally {
     view.renderer.destroy()
   }
 })
 
-test("the meter fills in proportion and warns near the limit", async () => {
+test("each card gets a stable colour identity from the theme's categorical hues", () => {
+  expect(identity(light, "custom:a")["200"]).toBe(identity(light, "custom:a")["200"])
+  const colors = new Set(["custom:a", "custom:b", "custom:c", "custom:d"].map((id) => identity(light, id)["200"]))
+  expect(colors.size).toBe(2)
+  // Themes without hues fall back to the accent, synthesised from the feedback colour.
+  expect(ints(identity(theme, "custom:a")["200"])).toEqual(ints(theme.text.feedback.info.base))
+})
+
+test("the kit: pills sit on their surface, items, stats and empty states line up", async () => {
+  const view = await testRender(() => (
+    <box width={30}>
+      <Card theme={light} title="Kit">
+        <box flexDirection="row" gap={1}><Pill theme={light} tone="success">ok</Pill><Pill theme={light}>main</Pill></box>
+        <Item theme={light} icon="✓" tone="success" title="Review the change" detail="2m" />
+        <Stat theme={light} label="Context" value="52k" />
+        <Empty theme={light}>Nothing yet.</Empty>
+      </Card>
+    </box>
+  ), { width: 30, height: 9 })
+  try {
+    await view.renderOnce()
+    await view.renderOnce()
+    const lines = view.captureCharFrame().split("\n")
+    expect(lines[2]).toMatch(/^┃   ok   main  +$/)
+    expect(lines[3]).toMatch(/^┃  ✓ Review the change +2m  $/)
+    expect(lines[4]).toMatch(/^┃  Context +52k  $/)
+    expect(lines[5]).toMatch(/^┃  Nothing yet\. +$/)
+    // A toned pill is the hue's soft tint with its strong ink; a neutral one is a raised chip.
+    expect(bg(view, 2, 4)).toMatchObject({ fg: ints("#00aa55"), bg: ints("#003322") })
+    expect(bg(view, 2, 9).bg).toEqual(ints(mix("#203040", light.text.muted, 0.18)))
+    expect(bg(view, 3, 3).fg).toEqual(ints("#00aa55"))
+  } finally {
+    view.renderer.destroy()
+  }
+})
+
+test("the meter fills in the card's colour and warns near the limit", async () => {
   const view = await testRender(() => (
     <box flexDirection="column" width={20}>
       <text>Usage</text>
-      <Meter theme={theme} value={0.25} />
-      <Meter theme={theme} value={0.95} />
+      <Meter theme={light} value={0.25} />
+      <Meter theme={light} value={0.95} />
     </box>
   ), { width: 20, height: 3 })
   try {
-    // The meter measures itself after the first layout.
     await view.renderOnce()
     await view.renderOnce()
     expect(view.captureCharFrame().split("\n")[1]).toBe("━".repeat(20))
-    const runs = view.captureSpans().lines.slice(1).map((line) => line.spans.map((span) => ({ width: span.width, fg: span.fg.toInts().slice(0, 3) })))
-    expect(runs[0]![0]).toEqual({ width: 5, fg: [0, 170, 255] })
-    expect(runs[1]![0]).toEqual({ width: 19, fg: [255, 68, 68] })
+    const head = (row: number) => view.captureSpans().lines[row]!.spans.filter((span) => span.text.includes("━"))
+    expect(head(1)[0]!.fg.toInts().slice(0, 3)).not.toEqual(head(1).at(-1)!.fg.toInts().slice(0, 3))
+    const filled = (row: number) => head(row).slice(0, -1).reduce((sum, span) => sum + span.width, 0)
+    expect(filled(1)).toBe(5)
+    expect(head(2).at(-2)!.fg.toInts().slice(0, 3)).toEqual(ints("#ff4444"))
   } finally {
     view.renderer.destroy()
   }
 })
 
-test("the account summary always pairs a status word with its glyph", () => {
-  const now = Date.UTC(2026, 10, 3, 12)
-  const state = { version: 1 as const, repository: "me/cards", account: "me", automatic: true, base: {}, status: "synced" as const, lastSyncedAt: now - 120_000 }
-  expect(syncBadge(undefined, undefined)).toEqual({ glyph: "○", label: "Local", tone: "neutral" })
-  expect(syncBadge("me", undefined).label).toBe("Not synced")
-  expect(syncBadge("me", state)).toEqual({ glyph: "●", label: "Synced", tone: "success" })
-  expect(syncBadge("other", state).label).toBe("Paused")
+test("the sync status always pairs a word with its glyph", () => {
+  const state = { version: 1 as const, repository: "me/cards", account: "me", automatic: true, base: {}, status: "synced" as const }
+  expect(syncBadge(undefined, undefined)).toEqual({ glyph: "○", label: "local", tone: "neutral" })
+  expect(syncBadge("me", undefined).label).toBe("set up sync")
+  expect(syncBadge("me", state)).toEqual({ glyph: "●", label: "synced", tone: "success" })
+  expect(syncBadge("other", state).label).toBe("paused")
   expect(syncBadge("me", { ...state, status: "conflict" }).glyph).toBe("▲")
-  expect(summary(undefined, undefined, 0)).toBe("No cards yet · sign in to sync")
-  expect(summary("me", undefined, 1)).toBe("1 card · set up sync")
-  expect(summary("me", state, 3, now)).toBe("3 cards · synced 2m ago")
-  expect(summary("other", state, 3, now)).toBe("Switch gh to @me")
+  const now = Date.UTC(2026, 10, 3, 12)
   expect(relativeTime(now - 10_000, now)).toBe("just now")
+  expect(relativeTime(now - 120_000, now)).toBe("2m ago")
   expect(relativeTime(now - 3 * 3_600_000, now)).toBe("3h ago")
 })
 
-test("the account card shows who is signed in and opens the novaSpace dialog", async () => {
-  const unstub = stubCards("custom:subagents", "custom:copilot")
+test("the account line shows who is signed in and opens the novaSpace dialog", async () => {
   const { sync } = await engine()
   let modal: (() => JSX.Element) | undefined
   let dialog: { size?: string; centered?: boolean } = {}
@@ -134,42 +179,35 @@ test("the account card shows who is signed in and opens the novaSpace dialog", a
   ctx.ui.dialog.show = (render) => { dialog = {}; modal = render }
   ctx.ui.dialog.set = (settings) => { dialog = settings }
   const view = await testRender(() => (
-    <AccountCard ctx={ctx} sessionID="session" options={resolveOptions({})} pin="top" engine={sync} loadLogin={async () => "brnbtt"} accountStamp={async () => 1} update={noUpdate} />
-  ), { width: 40, height: 4 })
+    <AccountLine ctx={ctx} engine={sync} loadLogin={async () => "brnbtt"} accountStamp={async () => 1} update={noUpdate} />
+  ), { width: 40, height: 1 })
   try {
-    const frame = await view.waitForFrame((value) => value.includes("@brnbtt"))
-    expect(frame).toContain("✧ @brnbtt")
-    expect(frame).toContain("○ Not synced")
-    expect(frame).toContain("2 cards · set up sync")
-    expect(frame).not.toContain("⠿")
-    await view.mockMouse.click(6, 1)
+    const frame = await settle(view, (value) => value.includes("@brnbtt"))
+    expect(frame.split("\n")[0]).toMatch(/^ @brnbtt +○ set up sync $/)
+    await view.mockMouse.click(6, 0)
     expect(modal).toBeDefined()
     expect(dialog).toEqual({ size: "medium", centered: true })
   } finally {
     view.renderer.destroy()
-    unstub()
   }
 })
 
-test("the account card follows a GitHub account switch without reopening", async () => {
+test("the account line follows a GitHub account switch without reopening", async () => {
   const { sync } = await engine()
   const logins = ["before", "after"]
   let lookups = 0
   let stamp = 1
   const view = await testRender(() => (
-    <AccountCard ctx={context()} sessionID="session" options={resolveOptions({})} pin="top" engine={sync} accountPollMs={10}
+    <AccountLine ctx={context()} engine={sync} accountPollMs={10}
       accountStamp={async () => stamp} loadLogin={async () => logins[Math.min(lookups++, logins.length - 1)]} />
-  ), { width: 40, height: 4 })
+  ), { width: 40, height: 1 })
   try {
-    await Bun.sleep(60)
-    await view.flush()
-    expect(view.captureCharFrame()).toContain("@before")
+    await settle(view, (value) => value.includes("@before"))
     // Polling a change stamp must not run the account lookup every tick.
+    await Bun.sleep(50)
     expect(lookups).toBe(1)
     stamp = 2
-    await Bun.sleep(80)
-    await view.flush()
-    expect(view.captureCharFrame()).toContain("@after")
+    await settle(view, (value) => value.includes("@after"))
     expect(lookups).toBe(2)
   } finally {
     view.renderer.destroy()
@@ -196,7 +234,7 @@ test("the dialog lists cards, opens their folder and connects sync in one step",
   const opened: string[] = []
   const { view, click } = await dialogView({ sync, cardsDirectory: paths.cards, open: async (path) => { opened.push(path) } })
   try {
-    const frame = await view.waitForFrame((value) => value.includes("CARDS") && value.includes("○ Not synced"))
+    const frame = await view.waitForFrame((value) => value.includes("Cards") && value.includes("○ set up sync"))
     expect(frame).toContain("Your sidebar cards, on every machine.")
     expect(frame).toContain("Subagents · Copilot")
     expect(frame).toContain("example/novaspace-cards")
@@ -205,7 +243,7 @@ test("the dialog lists cards, opens their folder and connects sync in one step",
     expect(opened).toEqual([paths.cards])
 
     await click("sync-create")
-    const synced = await settle(view, (value) => value.includes("● Synced"))
+    const synced = await settle(view, (value) => value.includes("● synced"))
     expect(created).toEqual(["example/novaspace-cards"])
     expect(synced).toContain("Synced just now · automatic")
     expect(synced).toContain("Sync now")
@@ -226,7 +264,7 @@ test("the dialog explains how to sign in when gh is signed out", async () => {
   const { view } = await dialogView({ sync, cardsDirectory: paths.cards, login: undefined })
   try {
     const frame = await view.waitForFrame((value) => value.includes("gh auth login"))
-    expect(frame).toContain("○ Local")
+    expect(frame).toContain("○ local")
     expect(frame).not.toContain("Create & sync")
   } finally {
     view.renderer.destroy()
@@ -274,7 +312,7 @@ test("offers an update only for a managed package install and settles after appl
   }
 })
 
-test("session card uses current context, honours compaction and revert, and shows usage", async () => {
+test("the session header shows the title, what the session is doing, its context, cost and branch", async () => {
   const messages = [
     { id: "before", type: "assistant", tokens: { input: 800_000 } },
     { id: "compact", type: "compaction", status: "completed" },
@@ -285,15 +323,36 @@ test("session card uses current context, honours compaction and revert, and show
   expect(latestContext(messages, "after")).toBeUndefined()
   expect(latestContext(messages, "missing")).toBeUndefined()
   expect(latestContext(messages, "compact")?.tokens).toBe(800_000)
+  expect([compact(950), compact(52_500), compact(1_050_000), compact(12_000_000)]).toEqual(["950", "53k", "1.05M", "12M"])
+
   const ctx = context()
+  const session = ctx.data.session.get("session")! as { title?: string }
+  session.title = "Add --days flag"
   ctx.data.session.message = { list: () => messages }
   ctx.data.session.cost = () => 3.42
   ctx.data.location.vcs = { info: () => ({ branch: { current: "main" } }) }
-  const view = await testRender(() => <SessionInfoCard ctx={ctx} sessionID="session" options={resolveOptions({})} pin="bottom" />, { width: 38, height: 9 })
+  let status = "busy"
+  let pending: unknown[] = []
+  ctx.data.session.status = () => status
+  ctx.data.session.permission = { list: () => pending }
+  expect(sessionActivity(ctx, "session")).toEqual({ label: "working", tone: "accent", busy: true })
+  pending = [{}]
+  expect(sessionActivity(ctx, "session").label).toBe("needs you")
+  pending = []
+  status = "idle"
+  expect(sessionActivity(ctx, "session")).toEqual({ label: "idle", tone: "neutral", busy: false })
+
+  const view = await testRender(() => <SessionHeader ctx={ctx} sessionID="session" />, { width: 40, height: 12 })
   try {
-    const frame = await view.waitForFrame((value) => value.includes("Session") && value.includes("━"))
-    expect(frame).toContain("52,500 · 5%")
-    expect(frame).toContain("$3.42")
-    expect(frame).toMatch(/~\/DEV +main/)
+    // The meter and tile caps measure their width after the first layout.
+    const frame = await settle(view, (value) => /━{28}/.test(value) && value.includes("┃"))
+    const lines = frame.split("\n")
+    // One fact per row, so nothing that matters shares a row with a chip.
+    expect(lines[1]).toMatch(/^┃  Add --days flag +$/)
+    expect(lines[3]).toMatch(/^┃   ● idle  +\$3\.42  $/)
+    expect(lines[4]).toMatch(/^┃  gpt-5\.6-sol · high +$/)
+    expect(lines[6]).toMatch(/^┃  ━+ 5%  $/)
+    expect(lines[7]).toMatch(/^┃  53k of 1\.05M tokens +$/)
+    expect(lines[8]).toMatch(/^┃  DEV +main   $/)
   } finally { view.renderer.destroy() }
 })

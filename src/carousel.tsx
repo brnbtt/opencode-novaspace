@@ -4,7 +4,7 @@ import { MouseButton, type BoxRenderable, type ScrollBoxRenderable } from "@open
 import type { CardID } from "./config"
 import type { LayoutController } from "./layout"
 import type { TuiContext } from "./types"
-import { nativeScrollbar, useHostDimensions } from "./ui"
+import { accent, faint, nativeScrollbar, useHostDimensions } from "./ui"
 import type { SidebarDrag } from "./drag"
 
 type DragRegion = { manager: SidebarDrag; sessionID: string }
@@ -25,8 +25,7 @@ function PageDot(props: { id: CardID; active: boolean; ctx: TuiContext; drag?: D
       }}
     >
       <text
-        selectable={false} fg={props.active || hovered() ? props.ctx.theme.text.base : props.ctx.theme.text.muted}
-        opacity={props.active || hovered() ? 1 : 0.55}
+        selectable={false} fg={props.active ? accent(props.ctx.theme) : hovered() ? props.ctx.theme.text.base : faint(props.ctx.theme)}
       >{props.active ? "━━" : "•"}</text>
     </box>
   )
@@ -35,6 +34,9 @@ function PageDot(props: { id: CardID; active: boolean; ctx: TuiContext; drag?: D
 export function CardCarousel(props: { ctx: TuiContext; controller: LayoutController; drag?: DragRegion; render(id: CardID): JSX.Element }) {
   const dimensions = useHostDimensions(props.ctx)
   const [height, setHeight] = createSignal(7)
+  // A long bottom card scrolls within a third of the screen, and shows a
+  // scrollbar only then.
+  const limit = () => Math.max(3, Math.floor(dimensions().height * 0.35))
   let content: BoxRenderable | undefined
   let scroll: ScrollBoxRenderable | undefined
   let disposed = false
@@ -49,9 +51,9 @@ export function CardCarousel(props: { ctx: TuiContext; controller: LayoutControl
       <Show when={active()} keyed>{(id) => (
         <scrollbox
           ref={(value) => { scroll = value }}
-          height={Math.min(Math.max(1, height()), Math.max(3, Math.floor(dimensions().height * 0.35)))}
+          height={Math.min(Math.max(1, height()), limit())}
           horizontalScrollbarOptions={{ visible: false }}
-          verticalScrollbarOptions={{ ...nativeScrollbar(props.ctx.theme), position: "absolute", right: 0, top: 0, height: "100%" }}
+          verticalScrollbarOptions={{ ...nativeScrollbar(props.ctx.theme, height() > limit()), position: "absolute", right: 0, top: 0, height: "100%" }}
           onMouseScroll={(event) => {
             if (props.drag?.manager.gesture()) return
             if (event.scroll?.direction !== "left" && event.scroll?.direction !== "right") return

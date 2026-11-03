@@ -18,15 +18,18 @@ bun run build
 
 ## Cards
 
-novaSpace ships two built-in cards, active by default on a fresh install:
+novaSpace has no built-in cards. The sidebar frame has two fixed parts:
 
-- **novaSpace** (`account`) — pinned to the top: the GitHub account, the card
-  count and sync status. It opens the novaSpace dialog (cards folder, sync,
-  updates). Older layouts call it `setup`; `config.ts` maps that alias.
-- **Session** (`session-info`) — pinned to the bottom: context tokens with a
-  usage meter, cost, and folder/branch, using the native OpenCode sidebar data.
+- **Session header** (`src/header.tsx`): title, status, cost, model, context
+  meter, tokens, folder and branch. It replaces OpenCode's own title row, which
+  `src/host.ts` hides while novaSpace is mounted.
+- **Account line** (`src/account/line.tsx`): the GitHub login and sync status at
+  the bottom; it opens the novaSpace dialog (cards folder, sync, updates).
 
-Every other card is a custom card in the novaSpace cards folder
+The former built-in IDs `setup`, `account` and `session-info` are ignored
+wherever they appear.
+
+Every card is a custom card in the novaSpace cards folder
 (`~/.config/opencode/novaspace/cards/<name>/index.js`, see `src/paths.ts`).
 `createCardLibrary` in `src/custom-cards.tsx` scans that folder every few
 seconds and after each sync, imports new cards, validates their `apiVersion: 1`
@@ -34,9 +37,9 @@ default export, and registers them in `src/cards/registry.tsx` under
 `custom:<name>`. Removed folders unregister. A changed card is not re-imported:
 its helpers would stay cached, so it reports that a restart is needed instead.
 A missing or invalid module is skipped with one toast. Custom cards receive the
-normal `CardProps` plus `chrome` (`Card`, `CardTitle`, `CardAction`, `Meter`,
-`cardHeader`, `metricRow`) so they match the built-in cards without importing
-novaSpace internals.
+normal `CardProps` plus `chrome`, the baseline kit (`Card`, `CardTitle`,
+`CardAction`, `Item`, `Stat`, `Pill`, `Empty`, `Meter`, `cardHeader`,
+`metricRow`), so they look at home without importing novaSpace internals.
 
 Do not add personal cards to this repository. Tests that need extra cards
 register stand-ins with `stubCards()` from `tests/custom-cards.fixture.tsx`
@@ -53,7 +56,7 @@ first start the file is seeded from the arrangement saved there by 0.4.x.
 Plugin options supply the initial layout; loaded custom cards that the layout
 doesn't list join the end. Long bottom cards scroll within a height cap so the
 middle area stays usable. Card titles and body text stay selectable; only the
-`⠿` grip starts a drag.
+hatched title rule starts a drag.
 
 ## Card sync
 
@@ -134,8 +137,8 @@ one of two ways:
   load with `Cannot find package '@opentui/solid'`;
 - with peers materialized beside the plugin, they resolve to a **second** Solid
   runtime, so the sidebar paints one frame and no reactive update ever lands —
-  the account stays `novaSpace`, the card count stays at zero, and session
-  context stays `—`.
+  the status line stays `✧ novaSpace`, custom cards never appear, and session
+  context stays `No context yet`.
 
 `bun run build` (`scripts/build.ts`) compiles `src/**` ahead of time using the
 same Babel pipeline `@opentui/solid` ships. The compiled modules carry literal
@@ -170,7 +173,7 @@ Before publishing `opencode-novaspace`:
 
 npm versions are immutable, so verify a risky install-path change with a
 `X.Y.Z-rc.N` prerelease on the `next` dist-tag first. Confirm the managed cache
-does not materialize `solid-js` or `@opentui/*`, and that the card count, the
+does not materialize `solid-js` or `@opentui/*`, and that custom cards, the
 GitHub account, and session context update after mount — a populated value is
 the proof that a reactive update landed after the first frame.
 
@@ -212,8 +215,9 @@ Framework (`src/`)
   `setup` alias, and option parsing.
 - `paths.ts` — the novaSpace folder, cards folder, layout file and state folder.
 - `card.ts` — the card contract: `CardProps`, `CardDefinition`, and `defineCard`.
-- `ui.tsx` — shared card chrome: `Card`, `CardTitle` (with the drag grip),
-  `CardAction`, `Meter`, `Divider`, and colour helpers.
+- `ui.tsx` — the palette (`scale`, `ink`, `raised`, `identity`), `Tile`, and
+  the card kit: `Card`, `CardTitle`, `CardAction`, `Item`, `Stat`, `Pill`,
+  `Empty`, `Meter`.
 - `dialog.tsx` — dialog primitives: keyboard-navigable `ActionLink`s inside
   `DialogActions`, and opening paths.
 - `layout.tsx` — layout controller (order, pins, hidden, active page).
@@ -231,50 +235,57 @@ Framework (`src/`)
 
 Cards (`src/cards/`)
 
-- `registry.tsx` — built-in cards plus registered custom cards, the `cards`
-  lookup, and `partitionCards` (top/scroll/bottom).
-- `account/` — the novaSpace card (`index.tsx`), its dialog (`dialog.tsx`), and
-  the status wording shared by both (`status.ts`).
-- `session-info/` — the Session card.
+- `registry.tsx` — registered custom cards, the `cards` lookup, and
+  `partitionCards` (top/scroll/bottom).
+
+Frame
+
+- `header.tsx` — the session header.
+
+Account (`src/account/`)
+
+- `line.tsx` — the `✧` status line at the bottom of the sidebar.
+- `dialog.tsx` — the novaSpace dialog.
+- `status.ts` — the sync status wording shared by both.
 
 ### Design
 
-Cards follow OpenCode's own surface language: an elevated fill with a single
-left edge (`▎`), not a full box. Hierarchy comes from placement, spacing and
-weight before colour. Status always pairs a glyph with a word. The edge is
-drawn as a column of text cells because text respects scroll clipping in the
-host, while native box borders do not. Dialog actions use `ActionLink`
-variants: `primary` for the main action, `link` for others, and `quiet` for
-dismissive ones.
+Tiles follow OpenCode's own prompt box: a flat raised surface with a row of
+padding above and below and a thin `┃` edge on the left. Terminal cells can't
+draw true rounded corners, so tiles are square. Every colour comes from the
+theme: surfaces from `background.raised`, tones from the nine-step `hue`
+scales (step 200 is a strong ink and 800 a soft tint in either mode), and each
+card's colour from `categorical`, chosen by its ID (`identity()` in `ui.tsx`).
+Themes without hues fall back to colours synthesised from the feedback tokens.
+The edge is a column of text cells because text respects scroll clipping in
+the host while native box borders do not. Status always pairs a glyph with a
+word. Prefer one fact per row over sharing a row with a chip, so nothing
+important truncates. Meters measure their own width and appear one frame after
+layout. Dialog actions use `ActionLink` variants: `primary` for the main
+action, `link` for others, and `quiet` for dismissive ones.
 
-### Add a built-in card
+### Previewing the design
 
-Most cards belong outside novaSpace as custom cards (see the README). To add a
-built-in card:
-
-1. Create `src/cards/<id>/index.tsx` that renders with the shared `Card`
-   primitives and default-exports `defineCard({ id, title, render })`. Start the
-   file with `/** @jsxImportSource @opentui/solid */`, like every other card.
-2. Add the id to `cardIDs` (and a `defaultPins` entry) in `src/config.ts`.
-3. Import it and add it to the card list in `src/cards/registry.tsx`.
-4. Restart the TUI completely — a reload does not remount an already-mounted
-   sidebar.
-
-Keep reactive helpers on the `.tsx` path even when they contain no JSX; see the
-runtime note under "Host integration".
+Rendering the sidebar with `testRender` and a theme dumped from a live OpenCode
+(`context.theme`, with colours serialised) gives faithful previews in any theme
+without a terminal. Convert the captured spans to an HTML grid, drawing block
+glyphs as cell quadrants, and screenshot it with headless Chrome.
 
 ## Host integration
 
-`src/host.ts` adapts the sidebar wrapper observed in OpenCode 2.0.7: it bounds the
-native outer scroll area and removes the title/footer's extra padding so only the
-middle cards scroll. The public slot API has no host layout controls; the adapter
-checks the renderable hierarchy before applying changes and restores the host
-styles on disposal. Bottom padding is removed so the footer reaches the sidebar's
-lower edge. Recheck this adapter when upgrading OpenCode. It uses structural
-checks because the live host and plugins can load separate OpenTUI modules, making
-`instanceof ScrollBoxRenderable` fail across that boundary. OpenCode 2.1.2 ships
-OpenTUI 0.6, which removed `Renderable.getLayoutNode()`; the adapter reads Yoga
-style values through `layout()`, which supports both versions.
+`src/host.ts` adapts the native OpenCode sidebar: it hides the host's title row
+(novaSpace draws its own header), bounds the native outer scroll area so only
+the middle cards scroll, and removes the title and footer padding. The public
+slot API has no host layout controls, so the adapter checks the renderable
+hierarchy first and restores everything on disposal. Each adjustment applies
+and restores on its own inside a `try`, so a host change that breaks one
+cannot block the others or crash the sidebar. Recheck it when upgrading
+OpenCode. It uses structural checks because the live host and plugins can load
+separate OpenTUI modules, making `instanceof` fail. OpenTUI 0.6 (OpenCode 2.1.2)
+removed `Renderable.getLayoutNode()`; `layout()` reads the Yoga style getters on
+either version. Since OpenCode 2.2, a scrollbox reports itself as the parent of
+its content's children and its inner boxes no longer expose a parent chain;
+`isScrollBox` and the slot check accept both layouts.
 
 Reactive state lives in `drag.tsx` and `layout.tsx`; their `.ts` files are stable
 re-export entrypoints. OpenCode 2.0.7 rewrites Solid imports through its JSX

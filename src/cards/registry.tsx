@@ -2,12 +2,9 @@
 import { createSignal } from "solid-js"
 import type { CardID, CustomCardID, SidebarOptions } from "../config"
 import type { CardDefinition, PlacedCard } from "../card"
-import { account } from "./account"
-import { sessionInfo } from "./session-info"
 
-// Built-in cards. Custom cards are registered at runtime by ../custom-cards.tsx
+// Every card is a custom card, registered at runtime by ../custom-cards.tsx
 // from the novaSpace cards folder.
-const builtins = () => [account, sessionInfo]
 const [custom, setCustom] = createSignal<ReadonlyMap<CustomCardID, CardDefinition>>(new Map())
 
 export function registerCustomCard(definition: CardDefinition & { id: CustomCardID }) {
@@ -25,11 +22,10 @@ export function customCards(): CardDefinition[] {
   return [...custom().values()]
 }
 
-// Resolved lazily on each read. The account card transitively imports this
-// module through its dialog, so reading a card export at module-eval time could
-// hit a circular-import temporal dead zone depending on load order.
+// Resolved lazily on each read, so a card module that imports this registry
+// cannot hit a circular-import temporal dead zone depending on load order.
 export function cards(): Partial<Record<CardID, CardDefinition>> {
-  return Object.fromEntries([...builtins(), ...custom().values()].map((card) => [card.id, card]))
+  return Object.fromEntries([...custom().values()].map((card) => [card.id, card]))
 }
 
 export function activeCards(options: SidebarOptions): PlacedCard[] {

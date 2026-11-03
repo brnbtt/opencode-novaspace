@@ -72,7 +72,6 @@ export function createLayoutController(ctx: TuiContext, shared?: (seed: SharedLa
       return selectPage(pages[(index + delta + pages.length) % pages.length]!.id)
     },
     move(id: CardID, delta: -1 | 1) {
-      if (id === "account") return Promise.resolve()
       return edit((draft) => {
         const group = draft.cards.filter((card) => !draft.hidden.includes(card) && draft.pins[card] === draft.pins[id])
         const other = group[group.indexOf(id) + delta]
@@ -83,7 +82,7 @@ export function createLayoutController(ctx: TuiContext, shared?: (seed: SharedLa
       })
     },
     pin(id: CardID, pin: CardPin) {
-      if (!isCardID(id) || id === "account") return Promise.resolve()
+      if (!isCardID(id)) return Promise.resolve()
       return edit((draft) => {
         if (!draft.cards.includes(id)) draft.cards.push(id)
         draft.hidden = draft.hidden.filter((card) => card !== id)
@@ -92,7 +91,7 @@ export function createLayoutController(ctx: TuiContext, shared?: (seed: SharedLa
       })
     },
     place(id: CardID, pin: false | "bottom", before?: CardID) {
-      if (!isCardID(id) || id === "account" || before === id) return Promise.resolve()
+      if (!isCardID(id) || before === id) return Promise.resolve()
       if (before && (!options().cards.includes(before) || options().hidden.has(before) || options().pins[before] !== pin)) return Promise.resolve()
       return edit((draft) => {
         draft.cards = draft.cards.filter((card) => card !== id)
@@ -104,7 +103,6 @@ export function createLayoutController(ctx: TuiContext, shared?: (seed: SharedLa
       })
     },
     hide(id: CardID) {
-      if (id === "account") return Promise.resolve()
       return edit((draft) => { if (!draft.hidden.includes(id)) draft.hidden.push(id) })
     },
     reset() {

@@ -11,8 +11,17 @@ import { stubCards } from "./custom-cards.fixture"
 import { context, theme } from "./support"
 
 let unstub = () => {}
-beforeEach(() => { unstub = stubCards("custom:working-set", "custom:subagents") })
+beforeEach(() => { unstub = stubCards("custom:working-set", "custom:subagents", "custom:memory") })
 afterEach(() => unstub())
+
+/** Card rules and meters measure themselves after layout, a frame later. */
+async function settled(view: Awaited<ReturnType<typeof testRender>>, predicate: (frame: string) => boolean) {
+  for (let i = 0; i < 20; i++) {
+    await view.renderOnce()
+    if (predicate(view.captureCharFrame())) return view.captureCharFrame()
+  }
+  throw new Error(`Frame did not settle:\n${view.captureCharFrame()}`)
+}
 
 async function dragFixture(bottom = true, height = 40) {
   const ctx = context()
@@ -22,7 +31,7 @@ async function dragFixture(bottom = true, height = 40) {
     const binding = input().commands[0]!
     escape = () => binding.enabled?.() ? binding.run() : false
   } }
-  ctx.options = { cards: ["custom:working-set", "custom:subagents", "session-info"], pins: { "session-info": bottom ? "bottom" : false } }
+  ctx.options = { cards: ["custom:working-set", "custom:subagents", "custom:memory"], pins: { "custom:memory": bottom ? "bottom" : false } }
   let controller!: ReturnType<typeof createLayoutController>
   let drag!: SidebarDrag
   const view = await testRender(() => {
@@ -56,10 +65,10 @@ async function dragFixture(bottom = true, height = 40) {
 test("dragging real card grips reorders, previews pinning, and unpins back into scrolling", async () => {
   const { controller, drag, view, node, press } = await dragFixture()
   try {
-    const frame = await view.waitForFrame((value) => value.includes("Subagents"))
+    // Tiles draw their edge once they know their height.
+    const frame = await settled(view, (value) => value.includes("Subagents") && value.includes("┃"))
     expect(frame).not.toContain("⇩")
     expect(frame).not.toContain("↑")
-    expect(frame).toContain("Subagents ⠿")
     await press("custom:subagents")
     expect(drag.gesture()?.id).toBe("custom:subagents")
     expect(view.renderer.hasSelection).toBe(false)
@@ -68,11 +77,12 @@ test("dragging real card grips reorders, previews pinning, and unpins back into 
     await view.flush()
     expect(node("sidebar-drop-line")).toBeDefined()
     const floating = node("sidebar-drag-preview")
-    expect(floating.width).toBe(node("card-custom:subagents").width)
-    expect(floating.height).toBe(node("card-custom:subagents").height)
+    // The preview frames the card with one cell on every side.
+    expect(floating.width).toBe(node("card-custom:subagents").width + 2)
+    expect(floating.height).toBe(node("card-custom:subagents").height + 2)
     expect(node("card-custom:subagents").opacity).toBe(0.35)
     const previewText = view.captureCharFrame().split("\n").slice(floating.y, floating.y + floating.height).map((line) => line.slice(floating.x, floating.x + floating.width)).join("\n")
-    expect(previewText).toContain("Subagents ⠿")
+    expect(previewText).toContain("Subagents")
     expect(previewText).toContain("No subagents yet.")
     expect(controller.layout().scroll.map((card) => card.id)).toEqual(["custom:working-set", "custom:subagents"])
     await view.mockMouse.release(first.x + 3, first.y)
@@ -88,21 +98,21 @@ test("dragging real card grips reorders, previews pinning, and unpins back into 
     await view.flush()
     expect(view.captureCharFrame()).toContain("Add this card to the bottom")
     expect(node("sidebar-drag-preview").y + node("sidebar-drag-preview").height).toBeLessThan(footer.y)
-    expect(controller.layout().bottom.map((card) => card.id)).toEqual(["session-info"])
+    expect(controller.layout().bottom.map((card) => card.id)).toEqual(["custom:memory"])
     await view.mockMouse.release(footer.x + 5, footer.y + 2)
     await view.flush()
     expect(controller.activeBottom()).toBe("custom:subagents")
     expect(controller.layout().scroll.some((card) => card.id === "custom:subagents")).toBe(false)
-    expect(controller.layout().bottom.map((card) => card.id)).toEqual(["session-info", "custom:subagents"])
+    expect(controller.layout().bottom.map((card) => card.id)).toEqual(["custom:memory", "custom:subagents"])
 
     await press("custom:subagents")
-    const dot = node("sidebar-page-session-info")
+    const dot = node("sidebar-page-custom:memory")
     await view.mockMouse.emitMouseEvent("drag", dot.x, dot.y)
     await view.flush()
-    expect(view.captureCharFrame()).toContain("Move before Session")
+    expect(view.captureCharFrame()).toContain("Move before Memory")
     await view.mockMouse.release(dot.x, dot.y)
     await view.flush()
-    expect(controller.layout().bottom.map((card) => card.id)).toEqual(["custom:subagents", "session-info"])
+    expect(controller.layout().bottom.map((card) => card.id)).toEqual(["custom:subagents", "custom:memory"])
     expect(controller.activeBottom()).toBe("custom:subagents")
 
     await press("custom:subagents")
@@ -111,7 +121,7 @@ test("dragging real card grips reorders, previews pinning, and unpins back into 
     await view.flush()
     await view.mockMouse.release(middle.x + 4, middle.y)
     await view.flush()
-    expect(controller.layout().bottom.map((card) => card.id)).toEqual(["session-info"])
+    expect(controller.layout().bottom.map((card) => card.id)).toEqual(["custom:memory"])
     expect(controller.layout().scroll[0]?.id).toBe("custom:subagents")
     expect(node("card-custom:subagents").y).toBeLessThan(node("card-custom:working-set").y)
   } finally { view.renderer.destroy() }
@@ -178,11 +188,13 @@ test("floating preview preserves the full expanded card, styles, and pickup stat
 })
 
 test("drag autoscroll reveals clipped cards and cancellation stops without moving them", async () => {
-  const { controller, drag, view, node, press } = await dragFixture(true, 18)
+  const { controller, drag, view, node, press } = await dragFixture(true, 21)
   try {
     await view.waitForFrame((frame) => frame.includes("Working Set"))
-    await press("custom:working-set")
     const scroll = node("sidebar-middle") as ScrollBoxRenderable
+    // The cards must not fit, or there is nothing to reveal.
+    expect(scroll.scrollHeight).toBeGreaterThan(scroll.viewport.height)
+    await press("custom:working-set")
     await view.mockMouse.emitMouseEvent("drag", scroll.viewport.x + 4, scroll.viewport.y + scroll.viewport.height - 1)
     await Bun.sleep(180)
     await view.flush()
@@ -214,17 +226,22 @@ test("card actions still click normally and body text selection does not start a
   }, { width: 38, height: 8 })
   ctx.renderer = view.renderer
   try {
-    await view.waitForFrame((frame) => frame.includes("Refresh"))
-    await view.mockMouse.click(30, 1)
+    const frame = await settled(view, (value) => value.includes("Refresh") && value.includes("┃"))
+    const lines = frame.split("\n")
+    const row = lines.findIndex((line) => line.includes("Refresh"))
+    const body = lines.findIndex((line) => line.includes("Selectable"))
+    const action = lines[row]!.indexOf("Refresh") + 2
+    await view.mockMouse.click(action, row)
     expect(clicked).toBe(1)
     expect(drag.gesture()).toBeUndefined()
-    await view.mockMouse.pressDown(4, 2)
+    await view.mockMouse.pressDown(4, body)
     expect(drag.gesture()).toBeUndefined()
     expect(view.renderer.hasSelection).toBe(true)
-    await view.mockMouse.release(8, 2)
-    await view.mockMouse.pressDown(2, 1)
-    await view.mockMouse.emitMouseEvent("drag", 30, 1)
-    await view.mockMouse.release(30, 1)
+    await view.mockMouse.release(8, body)
+    const handle = view.renderer.root.findDescendantById("card-custom:working-set-handle")!
+    await view.mockMouse.pressDown(handle.x + 3, handle.y)
+    await view.mockMouse.emitMouseEvent("drag", action, row)
+    await view.mockMouse.release(action, row)
     await view.flush()
     expect(clicked).toBe(1)
     expect(drag.gesture()).toBeUndefined()
@@ -253,7 +270,7 @@ test("dragging supports an empty footer and cancels without changing the saved l
     await view.mockMouse.release(55, 3)
     await view.flush()
     expect(outsideClicks()).toBe(0)
-    expect(controller.layout().scroll.map((card) => card.id)).toEqual(["custom:working-set", "custom:subagents", "session-info"])
+    expect(controller.layout().scroll.map((card) => card.id)).toEqual(["custom:working-set", "custom:subagents", "custom:memory"])
     expect(drag.gesture()).toBeUndefined()
     await press("custom:subagents")
     const empty = node("sidebar-bottom")
@@ -261,10 +278,6 @@ test("dragging supports an empty footer and cancels without changing the saved l
     await view.mockMouse.release(empty.x + 4, empty.y + 2)
     await view.flush()
     expect(controller.activeBottom()).toBe("custom:subagents")
-    await controller.place("account", "bottom")
-    expect(controller.options().pins.account).toBe("top")
-    await controller.pin("account", false)
-    expect(controller.options().pins.account).toBe("top")
     await controller.place("custom:subagents", false)
     expect(controller.layout().scroll.some((card) => card.id === "custom:subagents")).toBe(true)
   } finally { view.renderer.destroy() }

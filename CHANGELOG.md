@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.6.0
+
+A redesigned sidebar.
+
+- **Session header.** OpenCode's title row is replaced by a header with the
+  session title, a live status chip (`⠋ working`, `▲ needs you` while a
+  permission waits, `● idle`), the cost, the model, a context meter, the tokens
+  used, and the folder with its branch. Each fact has its own row, so nothing
+  important is truncated. The Session card is gone; its information lives here.
+- **Tiles like the prompt box.** Cards are flat raised surfaces with a row of
+  padding above and below and a thin coloured edge on the left, like OpenCode's
+  input box. The header uses the theme's higher raised surface and its accent.
+- **A colour per card.** Each card gets a colour from the theme's categorical
+  palette, chosen by its ID, for its edge, its title dot and its meters.
+- **A baseline kit for custom cards.** `chrome.Card` draws its own header from
+  `title`, `icon` and `meta`. New `Item`, `Stat`, `Pill` and `Empty` join
+  `Meter`, so a card built from them looks finished with little work. Existing
+  `apiVersion: 1` cards keep working.
+- **Account line instead of the novaSpace card.** The bottom of the sidebar
+  shows your GitHub username and sync status; click it for the cards folder,
+  sync and updates. The `account` and `session-info` card IDs are ignored in
+  `cli.json` and saved layouts.
+- **Dynamic scrollbars.** The middle of the sidebar, bottom cards and the
+  dialog show a scrollbar only when their content doesn't fit.
+- **Drag by the title.** The `⠿` grip is gone; a card's title is its handle,
+  and its dot turns into a grip under the pointer.
+- **Fix the sidebar host adapter on OpenCode 2.2.** OpenTUI 0.6 changed how a
+  scrollbox reports its children, so since OpenCode 2.2 the adapter silently
+  skipped bounding the sidebar. It now recognises both layouts, and each host
+  adjustment applies and restores on its own, so a future change in OpenCode
+  can't take the sidebar down.
+- Options: `surfaceStrength` and `hoverStrength` now range from 0 to 1 and
+  default to 1; `pinnedSurfaceStrength` has no effect.
+
 ## 0.5.0
 
 novaSpace is now about custom cards. This release removes profile sync and the

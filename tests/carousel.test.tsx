@@ -6,12 +6,12 @@ import { stubCards } from "./custom-cards.fixture"
 import { context } from "./support"
 
 let unstub = () => {}
-beforeEach(() => { unstub = stubCards("custom:working-set", "custom:subagents") })
+beforeEach(() => { unstub = stubCards("custom:working-set", "custom:subagents", "custom:memory") })
 afterEach(() => unstub())
 
 test("carousel pills and dots switch bounded pages and disappear for a single page", async () => {
   const ctx = context()
-  ctx.options = { cards: ["session-info", "custom:subagents"], pins: { "session-info": "bottom", "custom:subagents": "bottom" } }
+  ctx.options = { cards: ["custom:memory", "custom:subagents"], pins: { "custom:memory": "bottom", "custom:subagents": "bottom" } }
   let controller!: ReturnType<typeof createLayoutController>
   const view = await testRender(() => {
     controller = createLayoutController(ctx)
@@ -31,7 +31,7 @@ test("carousel pills and dots switch bounded pages and disappear for a single pa
   }
   const navigation = () => view.captureCharFrame().split("\n")[view.renderer.root.findDescendantById("sidebar-pages")!.y]!.trim().replace(/\s+/g, " ")
   try {
-    await view.waitForFrame((frame) => frame.includes("Page: session-info"))
+    await view.waitForFrame((frame) => frame.includes("Page: custom:memory"))
     expect(navigation()).toBe("━━ •")
     expect(view.captureCharFrame()).not.toContain("Cards")
     expect(view.captureCharFrame()).not.toContain("+")
@@ -41,8 +41,8 @@ test("carousel pills and dots switch bounded pages and disappear for a single pa
     expect(view.captureCharFrame()).toContain("Page: custom:subagents")
     expect(navigation()).toBe("• ━━")
     expect(view.renderer.root.findDescendantById("sidebar-pages")!.y).toBeLessThanOrEqual(14)
-    await click("sidebar-page-session-info")
-    expect(view.captureCharFrame()).toContain("Page: session-info")
+    await click("sidebar-page-custom:memory")
+    expect(view.captureCharFrame()).toContain("Page: custom:memory")
     await view.waitForVisualIdle()
     await view.mockMouse.scroll(4, 0, "left")
     await view.flush()
@@ -50,7 +50,7 @@ test("carousel pills and dots switch bounded pages and disappear for a single pa
     await view.waitForVisualIdle()
     await view.mockMouse.scroll(4, 1, "right")
     await view.flush()
-    expect(controller.activeBottom()).toBe("session-info")
+    expect(controller.activeBottom()).toBe("custom:memory")
     await view.waitForVisualIdle()
     const navigationRow = view.renderer.root.findDescendantById("sidebar-pages")!
     await view.mockMouse.drag(28, navigationRow.y, 23, navigationRow.y)
@@ -61,7 +61,7 @@ test("carousel pills and dots switch bounded pages and disappear for a single pa
     expect(controller.activeBottom()).toBe("custom:working-set")
     expect(navigation()).toBe("• • ━━")
     await controller.hide("custom:working-set")
-    await controller.hide("session-info")
+    await controller.hide("custom:memory")
     await view.flush()
     expect(view.renderer.root.findDescendantById("sidebar-pages")).toBeUndefined()
     expect(view.captureCharFrame()).toContain("Page: custom:subagents")

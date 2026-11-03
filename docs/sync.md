@@ -43,7 +43,7 @@ machine, and the repository.
 - A file changed on one side only takes that side's version. This covers new
   cards, edits and deletions.
 - A file changed differently on both sides is a **conflict**. Sync pauses, the
-  novaSpace card shows **▲ Conflict**, and nothing is overwritten until you
+  account line shows **▲ conflict**, and nothing is overwritten until you
   choose **Keep this machine's** or **Use repository's**.
 - `layout.json` merges setting by setting, and pins merge card by card, so
   reordering on one machine and hiding a card on another both survive. If both
@@ -80,5 +80,5 @@ that's already loaded, the new version loads the next time OpenCode starts.
 ## Switching accounts
 
 Sync is tied to the GitHub account that connected it. If `gh` is signed in to a
-different account, sync shows **‖ Paused** until you switch back with
+different account, sync shows **‖ paused** until you switch back with
 `gh auth switch` or disconnect and connect again.

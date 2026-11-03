@@ -5,43 +5,54 @@
 [![npm](https://img.shields.io/npm/v/opencode-novaspace?color=0f766e&label=npm)](https://www.npmjs.com/package/opencode-novaspace)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/brnbtt/opencode-novaspace/blob/main/LICENSE)
 
-novaSpace replaces OpenCode's terminal sidebar with cards you write yourself. A
-card is a small JavaScript module in one folder. novaSpace loads it next to the
-built-in cards, lets you arrange it, and can sync your cards and their layout
-to your other machines through a private GitHub repository.
+novaSpace replaces OpenCode's terminal sidebar with a session header and cards
+you write yourself. A card is a small JavaScript module in one folder. novaSpace
+loads it, gives it a look that matches your theme, lets you arrange it, and can
+sync your cards and their layout to your other machines through a private
+GitHub repository.
 
 ```text
- ▎                                   
- ▎ ✧ @octo-dev            ● Synced   
- ▎ 3 cards · synced 2m ago        ›  
- ▎                                   
+┃                                    
+┃  Add --days flag with reviewer     
+┃  edge-case check                   
+┃                                    
+┃   ⠋ working                 $2.36  
+┃  claude-opus-5.5 · high            
+┃                                    
+┃  ━━━━━━━━━━━━━━━━━━━━──────────  36%
+┃  380k of 1.05M tokens              
+┃  weather-cli                main   
+┃                                    
 
- ▎                                   
- ▎ Subagents ⠿            ● 1  ✓ 4   
- ▎ ✓ Review --days flag change       
- ▎ succeeded · 2m 52s · reviewer     
- ▎                                   
- ─────────────────────────────────── 
- ▎                                   
- ▎ Session ⠿                         
- ▎ Context            52,500 · 5%    
- ▎ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   
- ▎ Spent                    $3.42    
- ▎ ~/projects/weather-cli    main    
- ▎                                   
+┃                                    
+┃  ● Working Set              Zed ↗  
+┃  weather-cli                       
+┃  ~/projects                        
+┃                                    
+┃  on main              3 changed    
+┃                                    
+
+ @octo-dev                  ● synced
 ```
+
+Every tile looks like OpenCode's own prompt box: a flat raised surface with a
+thin coloured edge. The colours come from your theme, so the sidebar looks
+right in light and dark themes, and each card gets its own colour from the
+theme's palette without any work.
 
 ## Why novaSpace
 
+- **A useful header.** The session's title, whether it's working or needs
+  you, the model, how full the context is, what it has cost, and the folder and
+  branch, without anything cut off.
 - **Your own cards.** Drop a folder with an `index.js` into the cards folder
   and it appears in the sidebar. Delete the folder and the card goes away.
+- **They look good with little work.** Give a card a title and use the built-in
+  pieces (items, stats, chips, meters) and it matches the rest of the sidebar.
 - **The same sidebar on every machine.** Sign in with the GitHub CLI and
   connect a private repository. Your cards and their arrangement follow you.
-- **Arrange it your way.** Drag a card's `⠿` grip to reorder it or pin it to
-  the bottom. The layout is saved and synced.
-- **Fits your theme.** Cards use colours from your current OpenCode theme, in
-  light and dark. The sidebar has no background of its own, so a translucent
-  terminal shows through between the cards.
+- **Arrange it your way.** Drag a card by its title to reorder it or pin it to
+  the bottom. The scrollbar appears only when the cards don't fit.
 
 ## Installation
 
@@ -52,17 +63,34 @@ opencode plugin add opencode-novaspace
 Then **quit and reopen OpenCode**. The sidebar is only replaced when OpenCode
 starts, so reloading isn't enough. You need OpenCode 2.0.12 or later.
 
-The novaSpace card appears at the top of the sidebar and the Session card at
-the bottom. Click the novaSpace card to open its settings.
+### Without access to npm
 
-## Built-in cards
+On a machine that can't reach the npm registry, install from a local folder:
 
-| Card | What it shows |
-| --- | --- |
-| **novaSpace** | Your GitHub account, how many cards you have, and sync status. Click it to open the cards folder, set up sync and install updates. |
-| **Session** | Context used, with a meter that turns amber at 80% and red at 90%, the cost so far, and the folder and branch. |
+1. On a machine that can, run `npm pack opencode-novaspace` (or download the
+   `.tgz` from the [GitHub release](https://github.com/brnbtt/opencode-novaspace/releases)).
+2. Extract it on the target machine, for example to
+   `~/.local/share/opencode-novaspace` (the archive contains a `package/`
+   folder; use that folder).
+3. Point the novaSpace entry in `~/.config/opencode/cli.json` at that folder:
 
-Everything else is a card you add.
+   ```json title="~/.config/opencode/cli.json"
+   { "plugins": [{ "package": "/Users/you/.local/share/opencode-novaspace" }] }
+   ```
+
+To update, replace the folder's contents with a newer release and restart
+OpenCode.
+
+## The sidebar
+
+- **Session header** at the top replaces OpenCode's title row. It shows the
+  title, a status chip (`⠋ working`, `▲ needs you` when a permission is waiting,
+  or `● idle`), the cost, the model, a context meter that turns amber at 80%
+  and red at 90%, the tokens used, and the folder with its branch.
+- **Your cards** fill the middle, which scrolls when they don't fit. Cards
+  pinned to the bottom become pages you switch with the dots underneath.
+- **The account line** at the very bottom shows your GitHub username and sync
+  status. Click it to open the cards folder, set up sync, and install updates.
 
 ## Custom cards
 
@@ -83,33 +111,41 @@ Cards live in one folder:
 Every folder in `cards/` that contains an `index.js` is a card. Its ID is
 `custom:` followed by the folder name, which must use lowercase letters, digits
 and dashes. Other files are helpers that cards can import. Open the folder from
-**novaSpace → Cards → Open folder**.
+the account line: **Cards → Open folder**.
 
-`index.js` default-exports the card's title and a `render` function:
+`index.js` default-exports the card's title and a `render` function. The
+smallest good-looking card gives `chrome.Card` a title and fills it with the
+built-in pieces:
 
-```js title="~/.config/opencode/novaspace/cards/hello/index.js"
+```jsx title="~/.config/opencode/novaspace/cards/deploys/index.jsx (before compiling)"
 export default {
   apiVersion: 1,
-  title: "Hello",
-  render({ chrome, ctx, drag, options, pin }) {
-    // Build the card with chrome.Card, chrome.CardTitle, chrome.CardAction,
-    // chrome.Meter, chrome.cardHeader and chrome.metricRow so it matches
-    // the built-in cards.
-  },
+  title: "Deploys",
+  render: ({ chrome, ctx, drag }) => (
+    <chrome.Card theme={ctx.theme} drag={drag} title="Deploys" meta="3 today">
+      <chrome.Item theme={ctx.theme} icon="✓" tone="success" title="api · production" detail="2m" />
+      <chrome.Item theme={ctx.theme} icon="◌" tone="info" title="web · staging" detail="now" />
+      <chrome.Stat theme={ctx.theme} label="Success rate" value="98%" />
+    </chrome.Card>
+  ),
 }
 ```
 
-`render` gets the same props as the built-in cards: `ctx` (the OpenCode plugin
-context, including `ctx.data` and `ctx.theme`), `sessionID`, `options`, `pin`,
-`drag` and `dragging`, plus `chrome`:
+`render` gets `ctx` (the OpenCode plugin context, including `ctx.data` and
+`ctx.theme`), `sessionID`, `options`, `pin`, `drag` and `dragging`, plus
+`chrome`. Pass `drag` to `Card` so the card can be moved.
 
 | Chrome | Use |
 | --- | --- |
-| `Card` | The card surface. Pass `drag` for the grip, `onPress` to make it clickable, and `accent` to colour its left edge. |
-| `CardTitle` | The bold title, with the drag grip when you pass `drag`. |
-| `CardAction` | A small clickable label. |
-| `Meter` | A one-row bar for usage or progress. `value` is a fraction from 0 to 1. |
-| `cardHeader`, `metricRow` | Box layouts for a title row and a label/value row. |
+| `Card` | The tile. With `title` (and optional `icon` and `meta`) it draws its own header. `onPress` makes it clickable; `accent` overrides its colour. |
+| `CardTitle` | The header's dot and bold title, for when you build the header yourself in a `cardHeader` row. With `drag`, the title is the drag handle. |
+| `Item` | A list row: a toned glyph, text that truncates, and muted detail on the right. |
+| `Stat` | A label and its value on one row. |
+| `Pill` | A small chip, neutral or in a tone (`accent`, `info`, `success`, `warning`, `error`). |
+| `Meter` | A one-row bar for usage or progress; `value` is 0 to 1. It uses the card's colour and turns amber at 80% and red at 90% unless you pass a `tone`. |
+| `Empty` | The quiet line for a card with nothing to show yet. |
+| `CardAction` | A small clickable label, for header actions. |
+| `cardHeader`, `metricRow` | Box layouts for a header row and a label/value row. |
 
 Write the card with OpenTUI Solid JSX, then **compile it to JavaScript**. The
 compiled file must import `@opentui/solid` and `solid-js` directly, so it uses
@@ -128,8 +164,8 @@ Sync copies the novaSpace folder (your cards and `layout.json`) between
 machines through a **private** GitHub repository that you own.
 
 1. Install and sign in to the [GitHub CLI](https://cli.github.com/) with
-   `gh auth login`. The novaSpace card then shows your account.
-2. Click the novaSpace card. Under **Sync**, keep the suggested
+   `gh auth login`. The account line then shows your username.
+2. Click the account line. Under **Sync**, keep the suggested
    `<you>/novaspace-cards` or edit it.
 3. Choose **Create & sync** for a new repository or **Use existing**.
 
@@ -141,7 +177,7 @@ repository.
   both machines changed the same setting, the machine that syncs keeps its own.
   The bottom page you're looking at stays per machine.
 - **Conflicts:** when the same card file changed on both machines, sync pauses
-  and the novaSpace card shows **▲ Conflict**. Open it and choose which
+  and the account line shows **▲ conflict**. Click it and choose which
   version to keep. Replaced local files are backed up, and the repository's
   history keeps old versions.
 - **What stays local:** files that look like they contain credentials, linked
@@ -157,10 +193,8 @@ For the details, see [How card sync works](https://github.com/brnbtt/opencode-no
 
 ## Arrange your cards
 
-Drag the `⠿` grip next to a card's title to move it. A line shows where it will
-land. Drop it at the bottom to pin it there. Several bottom cards become pages
-that you switch with the dots underneath. Press **Esc** to cancel. The
-novaSpace card always stays at the top.
+Grab a card by its title and drag it. A line shows where it will land. Drop it at the bottom to pin it there. Several bottom cards
+become pages that you switch with the dots underneath. Press **Esc** to cancel.
 
 ## Configuration
 
@@ -173,7 +207,7 @@ look, add an entry to `cli.json`:
     {
       "package": "opencode-novaspace",
       "options": {
-        "cards": ["account", "custom:subagents", "session-info"],
+        "cards": ["custom:working-set", "custom:subagents"],
         "pins": { "custom:subagents": "bottom" }
       }
     }
@@ -188,12 +222,11 @@ look, add an entry to `cli.json`:
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `cards` | `["account", "session-info"]` | Cards to show first, in order. Custom cards not listed join at the end. |
+| `cards` | `[]` | Cards to show first, in order. Cards not listed join at the end. |
 | `hidden` | `[]` | Cards to hide. |
-| `pins` | account `top`, session-info `bottom` | Set `"top"`, `"bottom"` or `false` for each card. |
-| `surfaceStrength` | `0.14` | How strongly card surfaces stand out from the sidebar. |
-| `pinnedSurfaceStrength` | `0.08` | The same, for the top and bottom cards. |
-| `hoverStrength` | `0.08` | Surface highlight when you hover over a card. |
+| `pins` | `{}` | Set `"top"`, `"bottom"` or `false` for each card. |
+| `surfaceStrength` | `1` | How strongly tiles stand out, from `0` (flat) to `1` (the theme's raised surface). |
+| `hoverStrength` | `1` | How far a tile lifts under the pointer, from `0` (no hover) to `1`. |
 | `hoverDuration` | `120` | Hover animation length in milliseconds. |
 | `gap` | `1` | Blank rows between cards. |
 
@@ -210,9 +243,9 @@ These options set the initial layout. Once you drag cards around, the saved
   loads cards only from its cards folder. Copy each card's files into
   `~/.config/opencode/novaspace/cards/<name>/` and remove `customCards` from
   `cli.json`.
-- **Sync shows ‖ Paused.** Sync uses the GitHub account that was signed in when
+- **Sync shows ‖ paused.** Sync uses the GitHub account that was signed in when
   you connected. Run `gh auth status`, then switch back or reconnect.
-- **Sync shows ▲ Conflict.** Open the novaSpace card and choose a version.
+- **Sync shows ▲ conflict.** Click the account line and choose a version.
 - **I used profile sync before 0.5.0.** novaSpace no longer syncs skills,
   instructions or settings. Your old repository and its `.novaspace/profile.json`
   are left untouched. Connect a repository again to sync cards.
