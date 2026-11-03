@@ -1,5 +1,4 @@
-import type { Snapshot } from "./sync-files"
-import { validateSnapshot } from "./sync-files"
+import { validateSnapshot, type Snapshot } from "./files"
 
 export type RemoteSnapshot = { files: Snapshot; revision?: string }
 export interface SyncRemote {
@@ -9,6 +8,10 @@ export interface SyncRemote {
   read(repository: string): Promise<RemoteSnapshot>
   write(repository: string, files: Snapshot, revision?: string): Promise<string>
 }
+
+/** The single file novaSpace owns in the sync repository. */
+export const remotePath = ".novaspace/cards.json"
+
 export async function gh(args: string[], input?: unknown) {
   const child = Bun.spawn(["gh", ...args], {
     stdin: input === undefined ? "ignore" : new Blob([JSON.stringify(input)]), stdout: "pipe", stderr: "pipe",
@@ -21,6 +24,7 @@ export async function gh(args: string[], input?: unknown) {
     return out.trim()
   } finally { clearTimeout(timer) }
 }
+
 export function validRepository(repository: string) {
   const value = repository.trim()
   // Enterprise-managed GitHub usernames include an underscore and enterprise
@@ -28,35 +32,33 @@ export function validRepository(repository: string) {
   if (!/^[A-Za-z0-9][A-Za-z0-9_-]*\/[A-Za-z0-9_.-]+$/.test(value)) throw new Error("Use an owner/repository name")
   return value
 }
+
 export const githubRemote: SyncRemote = {
   account: () => gh(["api", "user", "--jq", ".login"]),
   async create(repository) {
-    await gh(["repo", "create", validRepository(repository), "--private", "--description", "Personal OpenCode profile synced by novaSpace"])
+    await gh(["repo", "create", validRepository(repository), "--private", "--description", "novaSpace cards for the OpenCode sidebar"])
   },
   async verify(repository) {
-    validRepository(repository)
-    const result = JSON.parse(await gh(["api", `repos/${repository}`]))
+    const result = JSON.parse(await gh(["api", `repos/${validRepository(repository)}`]))
     if (!result.private || !result.permissions?.push) throw new Error("Choose a private repository you can push to")
   },
   async read(repository) {
-    validRepository(repository)
     let out: string
-    try { out = await gh(["api", `repos/${repository}/contents/.novaspace/profile.json`]) }
+    try { out = await gh(["api", `repos/${validRepository(repository)}/contents/${remotePath}`]) }
     catch (error) {
       if (error instanceof Error && /HTTP 404|Git Repository is empty/.test(error.message)) return { files: {} }
       throw error
     }
     const file = JSON.parse(out)
-    if (file.type !== "file" || file.encoding !== "base64" || file.size > 1_000_000) throw new Error("Unsupported remote profile file")
+    if (file.type !== "file" || file.encoding !== "base64" || file.size > 1_000_000) throw new Error("Unsupported remote cards file")
     const data = JSON.parse(Buffer.from(file.content, "base64").toString("utf8"))
-    if (data.version !== 1 && data.version !== 2) throw new Error("Unsupported profile format; update novaSpace")
+    if (data.version !== 1) throw new Error("The repository uses a newer card format; update novaSpace")
     return { files: validateSnapshot(data.files), revision: file.sha }
   },
   async write(repository, files, revision) {
-    validRepository(repository)
-    const result = JSON.parse(await gh(["api", "--method", "PUT", `repos/${repository}/contents/.novaspace/profile.json`, "--input", "-"], {
-      message: "Sync OpenCode profile with novaSpace",
-      content: Buffer.from(JSON.stringify({ version: 2, files }, null, 2) + "\n").toString("base64"),
+    const result = JSON.parse(await gh(["api", "--method", "PUT", `repos/${validRepository(repository)}/contents/${remotePath}`, "--input", "-"], {
+      message: "Sync novaSpace cards",
+      content: Buffer.from(JSON.stringify({ version: 1, files }, null, 2) + "\n").toString("base64"),
       ...(revision ? { sha: revision } : {}),
     }))
     return result.content.sha

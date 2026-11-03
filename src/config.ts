@@ -1,26 +1,45 @@
-// Built-in cards that ship with novaSpace. Anything else is a local custom card
-// that the user declares in the customCards option (see README).
-export const cardIDs = ["setup", "session-info"] as const
+// Built-in cards that ship with novaSpace. Every other card is a custom card
+// found in the novaSpace cards folder (see paths.ts and README).
+export const cardIDs = ["account", "session-info"] as const
 
 export type BuiltinCardID = typeof cardIDs[number]
 export type CustomCardID = `custom:${string}`
 export type CardID = BuiltinCardID | CustomCardID
-export const defaultCardOrder: readonly CardID[] = ["setup", "session-info"]
+export const defaultCardOrder: readonly CardID[] = ["account", "session-info"]
 export type CardPin = "top" | "bottom" | false
 
 export const defaultPins: Record<BuiltinCardID, CardPin> = {
-  setup: "top",
+  account: "top",
   "session-info": "bottom",
 }
 
-const customCardID = /^custom:[a-z0-9][a-z0-9-]*$/
+// Before 0.5.0 the account card was the "setup" card. Saved layouts and
+// cli.json options can still name it.
+const aliases: Record<string, CardID> = { setup: "account" }
+const customCardName = /^[a-z0-9][a-z0-9-]*$/
+
+export function isCustomCardName(value: string) {
+  return customCardName.test(value)
+}
 
 export function isCustomCardID(value: unknown): value is CustomCardID {
-  return typeof value === "string" && customCardID.test(value)
+  return typeof value === "string" && value.startsWith("custom:") && isCustomCardName(value.slice(7))
+}
+
+export function isCardID(value: unknown): value is CardID {
+  return typeof value === "string" && (cardIDs.includes(value as BuiltinCardID) || isCustomCardID(value))
+}
+
+export function cardID(value: unknown): CardID | undefined {
+  const id = typeof value === "string" ? aliases[value] ?? value : value
+  return isCardID(id) ? id : undefined
+}
+
+export function cardIDList(value: unknown): CardID[] {
+  return Array.isArray(value) ? [...new Set(value.map(cardID).filter((id): id is CardID => !!id))] : []
 }
 
 export type SidebarOptions = {
-  customCards: Record<CustomCardID, string>
   cards: CardID[]
   hidden: Set<CardID>
   pins: Record<CardID, CardPin>
@@ -31,29 +50,30 @@ export type SidebarOptions = {
   gap: number
 }
 
-export function isCardID(value: unknown): value is CardID {
-  return typeof value === "string" && (cardIDs.includes(value as BuiltinCardID) || isCustomCardID(value))
-}
-
 function isPin(value: unknown): value is CardPin {
   return value === false || value === "top" || value === "bottom"
 }
 
+export function pinMap(value: unknown): Partial<Record<CardID, CardPin>> {
+  const input = value && typeof value === "object" ? value as Record<string, unknown> : {}
+  const pins: Partial<Record<CardID, CardPin>> = {}
+  for (const [key, pin] of Object.entries(input)) {
+    const id = cardID(key)
+    if (id && isPin(pin)) pins[id] = pin
+  }
+  return pins
+}
+
 export function resolveOptions(value: unknown): SidebarOptions {
   const input = value && typeof value === "object" ? value as Record<string, unknown> : {}
-  const customInput = input.customCards && typeof input.customCards === "object" ? input.customCards as Record<string, unknown> : {}
-  const customCards = Object.fromEntries(Object.entries(customInput)
-    .filter(([id, path]) => isCustomCardID(id) && typeof path === "string" && (path.startsWith("/") || path.startsWith("~/")))) as Record<CustomCardID, string>
-  const requested = Array.isArray(input.cards) ? input.cards.filter(isCardID) : [...defaultCardOrder, ...Object.keys(customCards) as CustomCardID[]]
-  const cards = [...new Set(requested)]
-  const hidden = new Set(Array.isArray(input.hidden) ? input.hidden.filter(isCardID) : [])
-  const pinInput = input.pins && typeof input.pins === "object" ? input.pins as Record<string, unknown> : {}
+  const cards = Array.isArray(input.cards) ? cardIDList(input.cards) : [...defaultCardOrder]
+  const hidden = new Set(input.hidden instanceof Set ? [...input.hidden] : cardIDList(input.hidden))
+  const requested = pinMap(input.pins)
   const pins: Record<CardID, CardPin> = { ...defaultPins }
-  for (const id of cardIDs) if (isPin(pinInput[id])) pins[id] = pinInput[id]
-  for (const id of cards) if (isCustomCardID(id)) pins[id] = isPin(pinInput[id]) ? pinInput[id] : false
+  for (const id of cardIDs) if (requested[id] !== undefined) pins[id] = requested[id]
+  for (const id of cards) if (isCustomCardID(id)) pins[id] = requested[id] ?? false
 
   return {
-    customCards,
     cards,
     hidden,
     pins,

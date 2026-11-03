@@ -1,15 +1,32 @@
 /** @jsxImportSource @opentui/solid */
 import { MouseButton, type BoxRenderable, type ScrollBoxRenderable } from "@opentui/core"
 import { createContext, createSignal, onCleanup, onMount, useContext, type JSX } from "solid-js"
-import type { TuiContext } from "../../types"
+import type { Theme, TuiContext } from "./types"
+import { faint, mix } from "./ui"
 
-export function displaySetupPath(ctx: TuiContext, path: string) {
+export function displayPath(ctx: TuiContext, path: string) {
   return ctx.ui.format?.path(path) ?? path.replace(/^\/Users\/[^/]+(?=\/|$)/, "~")
+}
+
+export function openCommand(path: string) {
+  return process.platform === "darwin"
+    ? ["/usr/bin/open", path]
+    : process.platform === "win32"
+      ? ["cmd", "/c", "start", "", path]
+      : ["xdg-open", path]
+}
+
+export async function openPath(path: string) {
+  const child = Bun.spawn(openCommand(path), { stdin: "ignore", stdout: "ignore", stderr: "pipe" })
+  const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()])
+  if (code !== 0) throw new Error(stderr.trim() || `Could not open ${path}`)
 }
 
 type Action = { id: string; node: BoxRenderable; run(): void }
 const Actions = createContext<{ active(): string | undefined; register(action: Action): void }>()
-export function SetupActions(props: { ctx: TuiContext; children: JSX.Element; typing?: boolean }) {
+
+/** Tab / Shift+Tab move between the actions inside, Enter runs the focused one. */
+export function DialogActions(props: { ctx: TuiContext; children: JSX.Element; typing?: boolean }) {
   const actions: Action[] = []
   const [active, setActive] = createSignal<string>()
   const move = (direction: number) => {
@@ -42,10 +59,20 @@ export function SetupActions(props: { ctx: TuiContext; children: JSX.Element; ty
   } }}>{props.children}</Actions.Provider>
 }
 
-export function SetupActionLink(props: {
+export type ActionVariant = "link" | "primary" | "quiet"
+
+function actionColors(theme: Theme, variant: ActionVariant, highlighted: boolean, disabled: boolean) {
+  if (disabled) return { fg: faint(theme), bg: undefined }
+  if (highlighted) return { fg: theme.text.action.primary.hovered, bg: theme.background.action.primary.hovered }
+  if (variant === "primary") return { fg: theme.text.base, bg: mix(theme.background.base, theme.text.feedback.info.base, 0.28) }
+  return { fg: variant === "quiet" ? theme.text.muted : theme.text.feedback.info.base, bg: undefined }
+}
+
+export function ActionLink(props: {
   id: string
   ctx: TuiContext
   label: string
+  variant?: ActionVariant
   disabled?: boolean
   selected?: boolean
   onPress(): void
@@ -55,15 +82,17 @@ export function SetupActionLink(props: {
   let node: BoxRenderable | undefined
   const run = () => { if (!props.disabled) props.onPress() }
   const highlighted = () => !props.disabled && (props.selected || hovered() || actions?.active() === props.id)
+  const colors = () => actionColors(props.ctx.theme, props.variant ?? "link", highlighted(), !!props.disabled)
   onMount(() => { if (node) actions?.register({ id: props.id, node, run }) })
   return (
     <box
       id={props.id}
       ref={(value) => { node = value }}
       flexShrink={0}
+      height={1}
       paddingLeft={1}
       paddingRight={1}
-      backgroundColor={highlighted() ? props.ctx.theme.background.action.primary.hovered : undefined}
+      backgroundColor={colors().bg}
       onMouseOver={() => setHovered(true)}
       onMouseOut={() => setHovered(false)}
       onMouseUp={(event) => {
@@ -72,7 +101,7 @@ export function SetupActionLink(props: {
         run()
       }}
     >
-      <text selectable={false} fg={props.disabled ? props.ctx.theme.text.muted : highlighted() ? props.ctx.theme.text.action.primary.hovered : props.ctx.theme.text.feedback.info.base}>{props.label}</text>
+      <text selectable={false} fg={colors().fg}>{props.label}</text>
     </box>
   )
 }

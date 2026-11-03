@@ -1,499 +1,280 @@
-import { expect, test } from "bun:test"
+import { afterAll, expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { JSX } from "solid-js"
-import type { BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
+import { parseColor } from "@opentui/core"
 import { resolveOptions } from "../src/config"
-import { Card, cardSurface } from "../src/ui"
-import { SetupCard } from "../src/cards/setup/index"
-import { setupOpenCommand, SetupModal } from "../src/cards/setup/modal"
-import { cachedSetupInventory, emptyInventory, loadSetupInventory, type SetupInventory } from "../src/cards/setup/inventory"
-import type { ProfileState } from "../src/cards/setup/profile"
-import type { StandardizationPreflight } from "../src/cards/setup/preflight"
-import type { UpdateState } from "../src/cards/setup/update"
+import { Card, cardBorder, cardSurface, Meter } from "../src/ui"
+import { AccountCard } from "../src/cards/account/index"
+import { AccountDialog } from "../src/cards/account/dialog"
+import { relativeTime, summary, syncBadge } from "../src/cards/account/status"
+import type { UpdateState } from "../src/update"
 import { latestContext, SessionInfoCard } from "../src/cards/session-info/index"
+import { pathsIn } from "../src/paths"
+import { CardSync } from "../src/sync/engine"
+import type { Snapshot } from "../src/sync/files"
+import type { SyncRemote } from "../src/sync/remote"
+import { stubCards } from "./custom-cards.fixture"
 import { context, theme } from "./support"
-import { ProfileSync } from "../src/cards/setup/sync"
 
-test("animates the card surface slightly on hover", async () => {
+const temporary: string[] = []
+afterAll(async () => { for (const path of temporary) await rm(path, { recursive: true, force: true }) })
+
+async function engine(login = "example") {
+  const root = await mkdtemp(join(tmpdir(), "novaspace-ui-")); temporary.push(root)
+  const paths = pathsIn(join(root, "novaspace"), join(root, "state"))
+  await mkdir(join(paths.cards, "hello"), { recursive: true })
+  await writeFile(join(paths.cards, "hello", "index.js"), "export default {}\n")
+  let files: Snapshot = {}, revision: string | undefined
+  const created: string[] = []
+  const remote: SyncRemote = {
+    async account() { return login },
+    async create(repository) { created.push(repository) },
+    async verify() {},
+    async read() { return { files: { ...files }, revision } },
+    async write(_repository, next) { files = { ...next }; return revision = String(Number(revision ?? 0) + 1) },
+  }
+  return { sync: new CardSync(paths, remote), paths, created }
+}
+
+/** Waits on real time: sync work resolves on the file system, not on render passes. */
+async function settle(view: Awaited<ReturnType<typeof testRender>>, predicate: (frame: string) => boolean) {
+  const deadline = Date.now() + 3_000
+  while (Date.now() < deadline) {
+    await view.renderOnce()
+    const frame = view.captureCharFrame()
+    if (predicate(frame)) return frame
+    await Bun.sleep(10)
+  }
+  throw new Error(`Frame did not settle:\n${view.captureCharFrame()}`)
+}
+
+const noUpdate = { load: async (): Promise<UpdateState> => ({ status: "unknown" }), check: async (): Promise<UpdateState> => ({ status: "unknown" }) }
+
+function bg(view: Awaited<ReturnType<typeof testRender>>, row: number, column: number) {
+  let offset = 0
+  for (const span of view.captureSpans().lines[row]!.spans) {
+    if (column < offset + span.width) return { bg: span.bg.toInts().slice(0, 3), fg: span.fg.toInts().slice(0, 3), text: span.text }
+    offset += span.width
+  }
+  throw new Error(`no cell at ${row},${column}`)
+}
+
+test("cards are an elevated surface with a single left edge that lights up on hover", async () => {
   const options = resolveOptions({ hoverDuration: 40, hoverStrength: 0.1 })
   const view = await testRender(() => (
-    <Card theme={theme} strength={options.surfaceStrength} hoverStrength={options.hoverStrength} hoverDuration={options.hoverDuration}>
-      <text>Hover me</text>
-    </Card>
-  ), { width: 30, height: 6 })
-  try {
-    await view.waitForFrame((frame) => frame.includes("Hover me"))
-    const span = () => view.captureSpans().lines.flatMap((line) => line.spans).find((item) => item.text.includes("Hover me"))!
-    expect(span().bg.toInts().slice(0, 3)).toEqual(cardSurface(theme, options.surfaceStrength).toInts().slice(0, 3))
-    await view.mockMouse.moveTo(3, 1)
-    await Bun.sleep(70)
-    await view.flush()
-    expect(span().bg.toInts().slice(0, 3)).toEqual(cardSurface(theme, options.surfaceStrength + options.hoverStrength).toInts().slice(0, 3))
-  } finally {
-    view.renderer.destroy()
-  }
-})
-
-test("frames the card surface flush with its border", async () => {
-  const options = resolveOptions({})
-  const view = await testRender(() => (
-    <Card theme={theme} strength={options.surfaceStrength}>
+    <Card theme={theme} strength={options.surfaceStrength} hoverStrength={options.hoverStrength} hoverDuration={options.hoverDuration} onPress={() => {}}>
       <text>Inside</text>
     </Card>
   ), { width: 20, height: 5 })
   try {
-    await view.waitForFrame((frame) => frame.includes("Inside") && frame.includes("▁"))
+    await view.waitForFrame((frame) => frame.includes("Inside") && frame.includes("▎"))
     const surface = cardSurface(theme, options.surfaceStrength).toInts().slice(0, 3)
-    const lines = view.captureSpans().lines
-    const bgAt = (row: number, column: number) => {
-      let offset = 0
-      for (const span of lines[row]!.spans) {
-        if (column < offset + span.width) return span.bg.toInts().slice(0, 3)
-        offset += span.width
-      }
-      throw new Error(`no cell at ${row},${column}`)
-    }
-    expect(bgAt(1, 2)).toEqual(surface)
-    for (const [row, column] of [[0, 1], [0, 5], [0, 18], [2, 1], [2, 5], [2, 18]] as const) expect(bgAt(row, column)).toEqual(surface)
-    for (const row of [0, 1, 2]) for (const column of [0, 19]) expect(bgAt(row, column)).not.toEqual(surface)
-    const text = view.captureCharFrame().split("\n")
-    expect(text[0]).toBe(`▕${"▔".repeat(18)}▏`)
-    expect(text[1]!.startsWith("▕ Inside")).toBe(true)
-    expect(text[1]!.endsWith("▏")).toBe(true)
-    expect(text[2]).toBe(`▕${"▁".repeat(18)}▏`)
+    const lines = view.captureCharFrame().split("\n")
+    expect(lines.slice(0, 3)).toEqual(["▎".padEnd(20), "▎ Inside".padEnd(20), "▎".padEnd(20)])
+    // The fill reaches every edge: no box border, no gap around the content.
+    for (const [row, column] of [[0, 0], [0, 19], [1, 2], [2, 10], [2, 19]] as const) expect(bg(view, row, column).bg).toEqual(surface)
+    expect(bg(view, 1, 0).fg).toEqual(parseColor(cardBorder(theme)).toInts().slice(0, 3))
+
+    await view.mockMouse.moveTo(4, 1)
+    await Bun.sleep(70)
+    await view.flush()
+    expect(bg(view, 1, 4).bg).toEqual(cardSurface(theme, options.surfaceStrength + options.hoverStrength).toInts().slice(0, 3))
+    expect(bg(view, 1, 0).fg).toEqual([0, 170, 255])
   } finally {
     view.renderer.destroy()
   }
 })
 
-test("opens the compact setup hub from the main card", async () => {
-  const syncHome = await mkdtemp(join(tmpdir(), "novaspace-ui-"))
-  const syncEngine = new ProfileSync({ home: syncHome, config: join(syncHome, "config"), state: join(syncHome, "state") }, {
-    async account() { return "example" }, async verify() {}, async read() { return { files: {} } }, async write() { return "1" },
-  })
+test("the meter fills in proportion and warns near the limit", async () => {
+  const view = await testRender(() => (
+    <box flexDirection="column" width={20}>
+      <text>Usage</text>
+      <Meter theme={theme} value={0.25} />
+      <Meter theme={theme} value={0.95} />
+    </box>
+  ), { width: 20, height: 3 })
+  try {
+    // The meter measures itself after the first layout.
+    await view.renderOnce()
+    await view.renderOnce()
+    expect(view.captureCharFrame().split("\n")[1]).toBe("━".repeat(20))
+    const runs = view.captureSpans().lines.slice(1).map((line) => line.spans.map((span) => ({ width: span.width, fg: span.fg.toInts().slice(0, 3) })))
+    expect(runs[0]![0]).toEqual({ width: 5, fg: [0, 170, 255] })
+    expect(runs[1]![0]).toEqual({ width: 19, fg: [255, 68, 68] })
+  } finally {
+    view.renderer.destroy()
+  }
+})
+
+test("the account summary always pairs a status word with its glyph", () => {
+  const now = Date.UTC(2026, 10, 3, 12)
+  const state = { version: 1 as const, repository: "me/cards", account: "me", automatic: true, base: {}, status: "synced" as const, lastSyncedAt: now - 120_000 }
+  expect(syncBadge(undefined, undefined)).toEqual({ glyph: "○", label: "Local", tone: "neutral" })
+  expect(syncBadge("me", undefined).label).toBe("Not synced")
+  expect(syncBadge("me", state)).toEqual({ glyph: "●", label: "Synced", tone: "success" })
+  expect(syncBadge("other", state).label).toBe("Paused")
+  expect(syncBadge("me", { ...state, status: "conflict" }).glyph).toBe("▲")
+  expect(summary(undefined, undefined, 0)).toBe("No cards yet · sign in to sync")
+  expect(summary("me", undefined, 1)).toBe("1 card · set up sync")
+  expect(summary("me", state, 3, now)).toBe("3 cards · synced 2m ago")
+  expect(summary("other", state, 3, now)).toBe("Switch gh to @me")
+  expect(relativeTime(now - 10_000, now)).toBe("just now")
+  expect(relativeTime(now - 3 * 3_600_000, now)).toBe("3h ago")
+})
+
+test("the account card shows who is signed in and opens the novaSpace dialog", async () => {
+  const unstub = stubCards("custom:subagents", "custom:copilot")
+  const { sync } = await engine()
   let modal: (() => JSX.Element) | undefined
-  const opened: string[] = []
-  const ctx = context((render) => { modal = render })
-  let dialogSettings: { size?: string; centered?: boolean } = {}
-  ctx.ui.dialog.show = (render) => { dialogSettings = {}; modal = render }
-  ctx.ui.dialog.set = (settings) => { dialogSettings = settings }
-  const options = resolveOptions(ctx.options)
-  const inventory = emptyInventory()
-  inventory.skills = Array.from({ length: 10 }, (_, index) => ({ name: `skill-${index}`, target: { path: `/Users/example/.agents/skills/skill-${index}/SKILL.md`, kind: "file" } }))
-  inventory.instructions = [{ name: "AGENTS.md", target: { path: "/Users/example/.config/opencode/AGENTS.md", kind: "file" } }]
-  inventory.plugins = [{ name: "novaspace", state: "success", target: { path: "/Users/example/.config/opencode/opencode.jsonc", kind: "file" } }]
-  inventory.mcp = ["gateway", "playwright"].map((name) => ({ name, state: "success" as const, target: { path: "/Users/example/.config/opencode/opencode.jsonc", kind: "file" as const } }))
-  inventory.agents = Array.from({ length: 4 }, (_, index) => ({ name: `agent-${index}`, target: { path: "/Users/example/.config/opencode/opencode.jsonc", kind: "file" as const } }))
-  inventory.targets = {
-    skills: { path: "/Users/example/.agents/skills", kind: "folder" },
-    instructions: { path: "/Users/example/.config/opencode", kind: "folder" },
-    plugins: { path: "/Users/example/.config/opencode/plugins", kind: "folder" },
-    mcp: { path: "/Users/example/.config/opencode", kind: "folder" },
-    agents: { path: "/Users/example/.config/opencode", kind: "folder" },
-  }
-  inventory.files = {
-    skills: Array.from({ length: 7 }, (_, index) => ({ path: `/Users/example/.agents/skills/skill-${index}/SKILL.md`, kind: "file" as const })),
-    instructions: [{ path: "/Users/example/.config/opencode/AGENTS.md", kind: "file" }],
-    plugins: [{ path: "/Users/example/.config/opencode/opencode.jsonc", kind: "file" }],
-    mcp: [{ path: "/Users/example/.config/opencode/opencode.jsonc", kind: "file" }],
-    agents: [{ path: "/Users/example/.config/opencode/opencode.jsonc", kind: "file" }],
-  }
-  inventory.settings = { path: "/Users/example/.config/opencode/opencode.jsonc", kind: "file" }
-  const preflight: StandardizationPreflight = {
-    root: "/Users/example/.config/opencode",
-    moves: [{
-      from: "/Users/example/.agents/skills",
-      to: "/Users/example/.config/opencode/skills",
-      files: 7,
-      detail: "Move into OpenCode's canonical global skills folder",
-    }],
-    ready: [{ name: "Instructions", path: "/Users/example/.config/opencode/AGENTS.md" }],
-    warnings: [{ name: "Machine-specific path", path: "/Users/example/.config/opencode/opencode.jsonc", detail: "/Users/example/DEV/worktrees" }],
-    blockers: [],
-    excluded: [{ name: "Shared service configuration", path: "/Users/example/.config/opencode/service.json", detail: "Machine-local" }],
-    project: [{ name: "Instructions", path: "/Users/example/DEV/project/AGENTS.md", detail: "Project-owned · not synced with profile" }],
-  }
-  const card = await testRender(() => (
-    <SetupCard
-      ctx={ctx}
-      sessionID="session"
-      options={options}
-      pin="top"
-      loadProfile={async () => ({ login: "brunobett_microsoft", connection: "connected", sync: "unconfigured" })}
-      loadInventory={async () => inventory}
-      loadPreflight={async () => preflight}
-      openTarget={async (target) => { opened.push(target.path) }}
-      syncEngine={syncEngine}
-    />
-  ), { width: 38, height: 15 })
+  let dialog: { size?: string; centered?: boolean } = {}
+  const ctx = context()
+  ctx.ui.dialog.show = (render) => { dialog = {}; modal = render }
+  ctx.ui.dialog.set = (settings) => { dialog = settings }
+  const view = await testRender(() => (
+    <AccountCard ctx={ctx} sessionID="session" options={resolveOptions({})} pin="top" engine={sync} loadLogin={async () => "brnbtt"} accountStamp={async () => 1} update={noUpdate} />
+  ), { width: 40, height: 4 })
   try {
-    const frame = await card.waitForFrame((value) => value.includes("Skills"))
-    expect(frame).toContain("@brunobett_microsoft")
+    const frame = await view.waitForFrame((value) => value.includes("@brnbtt"))
+    expect(frame).toContain("✧ @brnbtt")
+    expect(frame).toContain("○ Not synced")
+    expect(frame).toContain("2 cards · set up sync")
     expect(frame).not.toContain("⠿")
-    expect(frame).not.toContain("Set up sync")
-    const status = card.renderer.root.findDescendantById("setup-sync-status")!
-    await card.mockMouse.moveTo(status.x + status.width - 1, status.y)
-    expect(await card.waitForFrame((value) => value.includes("Set up sync"))).toContain("Set up sync")
-    await card.mockMouse.moveTo(3, 4)
-    expect(await card.waitForFrame((value) => !value.includes("Set up sync"))).toContain("@brunobett_microsoft")
-    expect(frame.split("\n")[2]).toContain("─")
-    expect(frame).toContain("Skills")
-    expect(frame).toContain("10 ready")
-    expect(frame).toContain("Instructions")
-    expect(frame).toContain("1 active")
-    expect(frame).toContain("Plugins")
-    expect(frame).toContain("MCP")
-    expect(frame).toContain("2 connected")
-    expect(frame).toContain("Subagents")
-    expect(frame).toContain("4 available")
-    expect(frame).toContain("✧ novaSpace settings")
-    const rows = frame.split("\n")
-    const manageRow = rows.findIndex((line) => line.includes("novaSpace settings"))
-    expect(rows[manageRow - 1]).toContain("─")
-    // Clicking the settings text (not just the divider) must open it.
-    await card.mockMouse.click(6, manageRow)
+    await view.mockMouse.click(6, 1)
     expect(modal).toBeDefined()
-    expect(dialogSettings).toEqual({ size: "medium", centered: true })
-  } finally {
-    card.renderer.destroy()
-  }
-  const setupModal = modal!
-
-  let dialogBox: BoxRenderable | undefined
-  const detail = await testRender(() => (
-    <box width="100%" height="100%" justifyContent="center" alignItems="center">
-      <box ref={(value) => { dialogBox = value }} width={76} paddingTop={1}>
-        {setupModal()}
-      </box>
-    </box>
-  ), { width: 90, height: 40 })
-  try {
-    const frame = await detail.waitForFrame((value) => value.includes("novaSpace"))
-    expect(frame).toContain("Profile sync")
-    expect(frame).toContain("Set up →")
-    expect(frame).not.toContain("Standardize this setup before")
-    expect(frame).toContain("Skills")
-    expect(frame).not.toContain("Available skills")
-    expect(frame).not.toContain("skill-0")
-    expect(frame).not.toContain("SKILL.md")
-    expect(frame).toContain("~/.agents/skills")
-    expect(frame).toContain("Open ↗")
-    expect(frame).toContain("~/.config/opencode/AGENTS.md")
-    expect(frame).toContain("~/.config/opencode/opencode.jsonc")
-    expect(frame).not.toContain("Sidebar cards")
-    expect(frame).not.toContain("Runtime settings")
-    expect(frame).toContain("Esc to close")
-    const sync = detail.renderer.root.findDescendantById("setup-sync-open")!
-    await detail.mockMouse.click(sync.x + 1, sync.y)
-    expect(modal).not.toBe(setupModal)
-    expect(dialogSettings).toEqual({ size: "medium", centered: true })
-    expect(detail.renderer.root.findDescendantById("setup-skills-items-scroll")).toBeUndefined()
-    const modalScroll = detail.renderer.root.findDescendantById("setup-modal-scroll") as ScrollBoxRenderable
-    expect(modalScroll.scrollHeight).toBeLessThanOrEqual(modalScroll.viewport.height)
-    const skillsLink = detail.renderer.root.findDescendantById("setup-skills-open")!
-    await detail.mockMouse.click(skillsLink.x + 1, skillsLink.y)
-    await Bun.sleep(0)
-    expect(opened).toEqual(["/Users/example/.agents/skills"])
-    const settingsLink = detail.renderer.root.findDescendantById("setup-plugins-mcp-agents-open")!
-    await detail.mockMouse.click(settingsLink.x + 1, settingsLink.y)
-    expect(opened[1]).toBe("/Users/example/.config/opencode/opencode.jsonc")
-    expect(detail.renderer.root.findDescendantById("setup-plugins-mcp-agents-section")).toBeDefined()
-    expect(detail.renderer.root.findDescendantById("setup-settings-open")).toBeUndefined()
-    expect(Math.abs(dialogBox!.y - (40 - dialogBox!.y - dialogBox!.height))).toBeLessThanOrEqual(1)
-    detail.resize(90, 28)
-    await detail.flush()
-    expect(Math.abs(dialogBox!.y - (28 - dialogBox!.y - dialogBox!.height))).toBeLessThanOrEqual(1)
-    expect(detail.captureCharFrame()).toContain("Esc to close")
-  } finally {
-    detail.renderer.destroy()
-  }
-
-  const syncModal = modal!
-  const onboarding = await testRender(() => (
-    <box width="100%" height="100%" justifyContent="center" alignItems="center">
-      <box width={76} paddingTop={1}>{syncModal()}</box>
-    </box>
-  ), { width: 90, height: 40 })
-  try {
-    const steps = await onboarding.waitForFrame((value) => value.includes("Your setup is prepared automatically"))
-    expect(steps).toContain("OpenCode settings")
-    expect(steps).toContain("Appearance & preferences")
-    const scroll = onboarding.renderer.root.findDescendantById("setup-sync-onboarding-scroll") as ScrollBoxRenderable
-    await Bun.sleep(30)
-    await onboarding.flush()
-    expect(scroll.scrollHeight).toBeLessThanOrEqual(scroll.viewport.height)
-    expect(onboarding.captureCharFrame()).not.toContain("Create private repository")
-    const filesReview = onboarding.renderer.root.findDescendantById("sync-files-toggle")!
-    await onboarding.mockMouse.click(filesReview.x + 1, filesReview.y)
-    await onboarding.flush()
-    expect(onboarding.captureCharFrame()).toContain("Sync details")
-    expect(onboarding.renderer.root.findDescendantById("setup-sync-review")).toBeUndefined()
-    expect(onboarding.renderer.root.findDescendantById("sync-allow-paths")).toBeUndefined()
-    expect(onboarding.captureCharFrame()).not.toContain("Standardization")
-    const setupBack = onboarding.renderer.root.findDescendantById("setup-sync-setup-back")!
-    await onboarding.mockMouse.click(setupBack.x + 1, setupBack.y)
-    expect(modal).not.toBe(syncModal)
-    expect(dialogSettings).toEqual({ size: "medium", centered: true })
-  } finally {
-    onboarding.renderer.destroy()
-    await rm(syncHome, { recursive: true, force: true })
-  }
-
-  const home = await mkdtemp(join(tmpdir(), "novaspace-inventory-"))
-  try {
-    await mkdir(join(home, ".config/opencode"), { recursive: true })
-    await mkdir(join(home, ".agents/skills"), { recursive: true })
-    await writeFile(join(home, ".config/opencode/opencode.jsonc"), "{}\n")
-    await writeFile(join(home, ".config/opencode/AGENTS.md"), "# Global instructions\n")
-    for (let index = 0; index < 6; index++) {
-      const folder = join(home, `.agents/skills/skill-${index}`)
-      await mkdir(folder, { recursive: true })
-      await writeFile(join(folder, "SKILL.md"), `# Skill ${index}\n`)
-    }
-    const discovered = await loadSetupInventory(ctx, { home })
-    expect(discovered.agents).toHaveLength(4)
-    expect(discovered.skills).toHaveLength(10)
-    expect(discovered.mcp).toHaveLength(2)
-    expect(discovered.settings?.kind).toBe("file")
-    expect(discovered.targets.skills?.kind).toBe("folder")
-    expect(discovered.files.skills!.length).toBeGreaterThan(5)
-  } finally {
-    await rm(home, { recursive: true, force: true })
-  }
-  if (process.platform === "darwin") {
-    expect(setupOpenCommand({ path: "/tmp/example.md", kind: "file" })).toEqual(["/usr/bin/open", "/tmp/example.md"])
-  }
-})
-
-test("renders a usable local setup before optional GitHub sync is configured", async () => {
-  const ctx = context()
-  const options = resolveOptions(ctx.options)
-  let profileLoads = 0
-  let inventoryLoads = 0
-  let resolveProfile!: (value: ProfileState) => void
-  let resolveInventory!: (value: SetupInventory) => void
-  const profile = new Promise<ProfileState>((resolve) => { resolveProfile = resolve })
-  const inventory = new Promise<SetupInventory>((resolve) => { resolveInventory = resolve })
-  const view = await testRender(() => (
-    <SetupCard
-      ctx={ctx}
-      sessionID="session"
-      options={options}
-      pin="top"
-      loadProfile={() => { profileLoads++; return profile }}
-      loadInventory={() => { inventoryLoads++; return inventory }}
-    />
-  ), { width: 38, height: 15 })
-  try {
-    const local = await view.waitForFrame((frame) => frame.includes("Local profile") && frame.includes("novaSpace settings"))
-    expect(local).toContain("Skills")
-    expect(local).toContain("10 ready")
-    expect(local).toContain("MCP")
-    expect(local).not.toContain("Checking GitHub")
-    expect(local).not.toContain("Inspecting customization layers")
-    expect(profileLoads).toBe(1)
-    expect(inventoryLoads).toBe(1)
-
-    resolveProfile({ login: "example", connection: "connected", sync: "unconfigured" })
-    resolveInventory(cachedSetupInventory(ctx))
-    const enriched = await view.waitForFrame((frame) => frame.includes("@example"))
-    expect(enriched).not.toContain("Set up sync")
-    expect(profileLoads).toBe(1)
-    expect(inventoryLoads).toBe(1)
+    expect(dialog).toEqual({ size: "medium", centered: true })
   } finally {
     view.renderer.destroy()
+    unstub()
   }
 })
 
-test("reports a failed inventory lookup instead of an empty machine", async () => {
-  const ctx = context()
-  const options = resolveOptions(ctx.options)
-  const view = await testRender(() => (
-    <SetupCard
-      ctx={ctx}
-      sessionID="session"
-      options={options}
-      pin="top"
-      loadProfile={() => Promise.resolve({ connection: "signed-out", sync: "unconfigured" } as ProfileState)}
-      loadInventory={() => Promise.reject(new Error("Plugin inventory timed out"))}
-    />
-  ), { width: 56, height: 16 })
-  try {
-    const failed = await view.waitForFrame((frame) => frame.includes("Stale counts"))
-    expect(failed).toContain("Plugin inventory timed out")
-    // The cached first frame stays visible so the card remains usable.
-    expect(failed).toContain("Skills")
-  } finally {
-    view.renderer.destroy()
-  }
-})
-
-test("reloads the GitHub account when the setup hub is opened", async () => {
-  const ctx = context()
-  ctx.ui.dialog.show = () => {}
-  ctx.ui.dialog.set = () => {}
-  const options = resolveOptions(ctx.options)
+test("the account card follows a GitHub account switch without reopening", async () => {
+  const { sync } = await engine()
   const logins = ["before", "after"]
-  let profileLoads = 0
-  const view = await testRender(() => (
-    <SetupCard
-      ctx={ctx}
-      sessionID="session"
-      options={options}
-      pin="top"
-      loadProfile={async () => ({ login: logins[Math.min(profileLoads++, logins.length - 1)], connection: "connected", sync: "unconfigured" })}
-      loadInventory={async () => cachedSetupInventory(ctx)}
-    />
-  ), { width: 38, height: 15 })
-  try {
-    const initial = await view.waitForFrame((frame) => frame.includes("@before"))
-    const rows = initial.split("\n")
-    const manageRow = rows.findIndex((line) => line.includes("novaSpace settings"))
-    expect(manageRow).toBeGreaterThan(-1)
-    // `gh auth switch` can change the account at any time, so opening the hub
-    // must re-read it rather than keep the value captured at mount.
-    await view.mockMouse.click(6, manageRow)
-    const refreshed = await view.waitForFrame((frame) => frame.includes("@after"))
-    expect(refreshed).not.toContain("@before")
-    expect(profileLoads).toBe(2)
-  } finally {
-    view.renderer.destroy()
-  }
-})
-
-test("picks up a GitHub account switch without reopening the card", async () => {
-  const ctx = context()
-  const options = resolveOptions(ctx.options)
-  const logins = ["before", "after"]
-  let profileLoads = 0
-  // `gh auth switch` rewrites gh's config; the card watches that stamp.
+  let lookups = 0
   let stamp = 1
   const view = await testRender(() => (
-    <SetupCard
-      ctx={ctx}
-      sessionID="session"
-      options={options}
-      pin="top"
-      accountPollMs={10}
-      accountStamp={async () => stamp}
-      loadProfile={async () => ({ login: logins[Math.min(profileLoads++, logins.length - 1)], connection: "connected", sync: "unconfigured" })}
-      loadInventory={async () => cachedSetupInventory(ctx)}
-    />
-  ), { width: 38, height: 15 })
+    <AccountCard ctx={context()} sessionID="session" options={resolveOptions({})} pin="top" engine={sync} accountPollMs={10}
+      accountStamp={async () => stamp} loadLogin={async () => logins[Math.min(lookups++, logins.length - 1)]} />
+  ), { width: 40, height: 4 })
   try {
     await Bun.sleep(60)
     await view.flush()
     expect(view.captureCharFrame()).toContain("@before")
-    // Polling a change stamp must not re-run the account lookup every tick.
-    expect(profileLoads).toBe(1)
-
+    // Polling a change stamp must not run the account lookup every tick.
+    expect(lookups).toBe(1)
     stamp = 2
     await Bun.sleep(80)
     await view.flush()
-    const switched = view.captureCharFrame()
-    expect(switched).toContain("@after")
-    expect(switched).not.toContain("@before")
-    expect(profileLoads).toBe(2)
+    expect(view.captureCharFrame()).toContain("@after")
+    expect(lookups).toBe(2)
   } finally {
     view.renderer.destroy()
   }
 })
 
-test("offers an update only for a managed package install", async () => {
+async function dialogView(props: Partial<Parameters<typeof AccountDialog>[0]> & { sync: CardSync; cardsDirectory: string }) {
   const ctx = context()
-  const toasts: string[] = []
-  ctx.ui.toast.show = (toast) => { toasts.push(String(toast.message)) }
-  const applied: string[] = []
-  let resolveApply!: (value: UpdateState) => void
-  const pending = new Promise<UpdateState>((resolve) => { resolveApply = resolve })
+  const login = "login" in props ? props.login : "example"
+  const view = await testRender(() => <AccountDialog ctx={ctx} update={noUpdate} {...props} login={login} engine={props.sync} />, { width: 64, height: 30 })
+  const click = async (id: string) => {
+    await settle(view, (value) => !value.includes("Working…"))
+    const node = view.renderer.root.findDescendantById(id)
+    expect(node).toBeDefined()
+    await view.mockMouse.click(node!.x + 1, node!.y)
+    await view.flush()
+  }
+  return { ctx, view, click }
+}
 
-  const local = await testRender(() => (
-    <SetupModal
-      ctx={ctx}
-      inventory={emptyInventory()}
-      loading={false}
-      update={{
-        load: async () => ({ status: "local", path: "/plugins/novaspace" }),
-        check: async () => ({ status: "local", path: "/plugins/novaspace" }),
-      }}
-    />
-  ), { width: 54, height: 14 })
+test("the dialog lists cards, opens their folder and connects sync in one step", async () => {
+  const unstub = stubCards("custom:subagents", "custom:copilot")
+  const { sync, paths, created } = await engine()
+  const opened: string[] = []
+  const { view, click } = await dialogView({ sync, cardsDirectory: paths.cards, open: async (path) => { opened.push(path) } })
   try {
-    const frame = await local.waitForFrame((value) => value.includes("Local checkout"))
+    const frame = await view.waitForFrame((value) => value.includes("CARDS") && value.includes("○ Not synced"))
+    expect(frame).toContain("Your sidebar cards, on every machine.")
+    expect(frame).toContain("Subagents · Copilot")
+    expect(frame).toContain("example/novaspace-cards")
+    expect(frame).not.toContain("Skills")
+    await click("cards-open")
+    expect(opened).toEqual([paths.cards])
+
+    await click("sync-create")
+    const synced = await settle(view, (value) => value.includes("● Synced"))
+    expect(created).toEqual(["example/novaspace-cards"])
+    expect(synced).toContain("Synced just now · automatic")
+    expect(synced).toContain("Sync now")
+    expect(synced).toContain("Auto: on")
+
+    await click("sync-automatic")
+    await settle(view, (value) => value.includes("Auto: off") && !value.includes("Working"))
+    await click("sync-disconnect")
+    await settle(view, (value) => value.includes("Create & sync"))
+  } finally {
+    view.renderer.destroy()
+    unstub()
+  }
+})
+
+test("the dialog explains how to sign in when gh is signed out", async () => {
+  const { sync, paths } = await engine()
+  const { view } = await dialogView({ sync, cardsDirectory: paths.cards, login: undefined })
+  try {
+    const frame = await view.waitForFrame((value) => value.includes("gh auth login"))
+    expect(frame).toContain("○ Local")
+    expect(frame).not.toContain("Create & sync")
+  } finally {
+    view.renderer.destroy()
+  }
+})
+
+test("offers an update only for a managed package install and settles after applying it", async () => {
+  const { sync, paths } = await engine()
+  const local = await dialogView({ sync, cardsDirectory: paths.cards, update: {
+    load: async () => ({ status: "local", path: "/plugins/novaspace" }),
+    check: async () => ({ status: "local", path: "/plugins/novaspace" }),
+  } })
+  try {
+    const frame = await local.view.waitForFrame((value) => value.includes("Local checkout"))
     // A checkout has no version to compare, so offering an update would lie.
     expect(frame).not.toContain("Update →")
   } finally {
-    local.renderer.destroy()
+    local.view.renderer.destroy()
   }
 
-  const managed = await testRender(() => (
-    <SetupModal
-      ctx={ctx}
-      inventory={emptyInventory()}
-      loading={false}
-      update={{
-        load: async () => ({ status: "current", target: "opencode-novaspace", version: "0.1.1" }),
-        check: async () => ({ status: "outdated", target: "opencode-novaspace", version: "0.1.1" }),
-        apply: async (_ctx, target) => { applied.push(target); return pending },
-      }}
-    />
-  ), { width: 54, height: 14 })
+  const applied: string[] = []
+  let resolveApply!: (value: UpdateState) => void
+  const managed = await dialogView({ sync, cardsDirectory: paths.cards, update: {
+    load: async () => ({ status: "current", target: "opencode-novaspace", version: "0.5.0" }),
+    check: async () => ({ status: "outdated", target: "opencode-novaspace", version: "0.5.0" }),
+    apply: async (_ctx, target) => { applied.push(target); return new Promise<UpdateState>((resolve) => { resolveApply = resolve }) },
+  } })
+  const toasts: string[] = []
+  managed.ctx.ui.toast.show = (toast) => { toasts.push(toast.message) }
   try {
-    // The cached state lands first, then the slower registry check flags it.
-    await managed.waitForFrame((value) => value.includes("v0.1.1"))
-    const offered = await managed.waitForFrame((value) => value.includes("Update →"))
-    const rows = offered.split("\n")
-    const updateRow = rows.findIndex((line) => line.includes("Update →"))
-    const column = rows[updateRow]!.indexOf("Update →")
-    await managed.mockMouse.click(column + 2, updateRow)
-    await managed.waitForFrame((value) => value.includes("Updating…"))
+    await managed.view.waitForFrame((value) => value.includes("v0.5.0"))
+    await managed.view.waitForFrame((value) => value.includes("Update →"))
+    await managed.click("update-apply")
+    await managed.view.waitForFrame((value) => value.includes("Updating…"))
     expect(applied).toEqual(["opencode-novaspace"])
-
-    resolveApply({ status: "updated", target: "opencode-novaspace", version: "0.1.1" })
-    // The host can still report `updating` immediately after a successful
-    // update, so the row must settle on its own rather than read that back.
-    const done = await managed.waitForFrame((value) => value.includes("restart to load"))
+    // The host can still report `updating` right after a successful update,
+    // so the row settles on the result instead of reading that back.
+    resolveApply({ status: "updated", target: "opencode-novaspace", version: "0.5.0" })
+    const done = await managed.view.waitForFrame((value) => value.includes("restart to load"))
     expect(done).not.toContain("Update →")
     expect(done).not.toContain("Updating…")
-    // An already-mounted sidebar keeps running the previous code.
-    expect(toasts.some((message) => message.includes("Restart the TUI"))).toBe(true)
+    expect(toasts.some((message) => message.includes("Restart OpenCode"))).toBe(true)
   } finally {
-    managed.renderer.destroy()
+    managed.view.renderer.destroy()
   }
 })
 
-test("settles the update row when the host still reports updating", async () => {
-  const ctx = context()
-  ctx.ui.toast.show = () => {}
-  const view = await testRender(() => (
-    <SetupModal
-      ctx={ctx}
-      inventory={emptyInventory()}
-      loading={false}
-      update={{
-        load: async () => ({ status: "outdated", target: "opencode-novaspace", version: "0.1.1" }),
-        check: async () => ({ status: "outdated", target: "opencode-novaspace", version: "0.1.1" }),
-        // Mirrors the real host: the flag is still set right after the update.
-        apply: async () => ({ status: "updated", target: "opencode-novaspace", version: "0.1.1" }),
-      }}
-    />
-  ), { width: 54, height: 14 })
-  try {
-    const offered = await view.waitForFrame((value) => value.includes("Update →"))
-    const rows = offered.split("\n")
-    const updateRow = rows.findIndex((line) => line.includes("Update →"))
-    await view.mockMouse.click(rows[updateRow]!.indexOf("Update →") + 2, updateRow)
-    const settled = await view.waitForFrame((value) => value.includes("restart to load"))
-    expect(settled).not.toContain("Updating…")
-  } finally {
-    view.renderer.destroy()
-  }
-})
-
-test("native info uses current context, honours compaction/revert, and omits duplicate MCP info", async () => {
+test("session card uses current context, honours compaction and revert, and shows usage", async () => {
   const messages = [
     { id: "before", type: "assistant", tokens: { input: 800_000 } },
     { id: "compact", type: "compaction", status: "completed" },
@@ -507,12 +288,12 @@ test("native info uses current context, honours compaction/revert, and omits dup
   const ctx = context()
   ctx.data.session.message = { list: () => messages }
   ctx.data.session.cost = () => 3.42
-  const view = await testRender(() => <SessionInfoCard ctx={ctx} sessionID="session" options={resolveOptions({})} pin="bottom" />, { width: 38, height: 10 })
+  ctx.data.location.vcs = { info: () => ({ branch: { current: "main" } }) }
+  const view = await testRender(() => <SessionInfoCard ctx={ctx} sessionID="session" options={resolveOptions({})} pin="bottom" />, { width: 38, height: 9 })
   try {
-    const frame = await view.waitForFrame((value) => value.includes("Session info"))
+    const frame = await view.waitForFrame((value) => value.includes("Session") && value.includes("━"))
     expect(frame).toContain("52,500 · 5%")
     expect(frame).toContain("$3.42")
-    expect(frame).not.toContain("MCP")
-    expect(frame).toContain("~/DEV")
+    expect(frame).toMatch(/~\/DEV +main/)
   } finally { view.renderer.destroy() }
 })

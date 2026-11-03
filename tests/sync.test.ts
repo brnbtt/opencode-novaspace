@@ -1,156 +1,217 @@
 import { afterEach, expect, test } from "bun:test"
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, unlink, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { Database } from "bun:sqlite"
-import { ProfileSync } from "../src/cards/setup/sync"
-import { collectFiles, validateSnapshot, type Snapshot, type SyncPaths } from "../src/cards/setup/sync-files"
-import type { SyncRemote } from "../src/cards/setup/sync-remote"
-import { validRepository } from "../src/cards/setup/sync-remote"
+import { pathsIn } from "../src/paths"
+import { CardSync, type SyncState } from "../src/sync/engine"
+import { collectFiles, decodeFile, validateSnapshot, type Snapshot } from "../src/sync/files"
+import { mergeLayout } from "../src/sync/merge"
+import { validRepository, type SyncRemote } from "../src/sync/remote"
 
 const temporary: string[] = []
 afterEach(async () => { for (const path of temporary.splice(0)) await rm(path, { recursive: true, force: true }) })
-async function machine(remote: SyncRemote) {
-  const home = await mkdtemp(join(tmpdir(), "novaspace-sync-")); temporary.push(home)
-  const paths: SyncPaths = { home, config: join(home, ".config/opencode"), state: join(home, "state") }
-  await mkdir(paths.config, { recursive: true })
-  return new ProfileSync(paths, remote)
-}
+
 function server() {
-  let files: Snapshot = {}, revision: string | undefined, writes = 0, account = "example"
-  let fail = false, race = false
+  let files: Snapshot = {}, revision: string | undefined, writes = 0, account = "example", offline = false
+  const created: string[] = []
   const remote: SyncRemote = {
     async account() { return account },
-    async verify() { if (fail) throw new Error("Offline") },
+    async create(repository) { created.push(repository) },
+    async verify() { if (offline) throw new Error("Offline") },
     async read() { return { files: { ...files }, revision } },
     async write(_repository, next, sha) {
-      if (race || sha !== revision) throw new Error("HTTP 409: remote changed")
-      files = { ...next }; revision = String(++writes); return revision
+      if (sha !== revision) throw new Error("HTTP 409: remote changed")
+      files = validateSnapshot({ ...next }); revision = String(++writes); return revision
     },
   }
-  return { remote, files: () => files, writes: () => writes, account: (value: string) => { account = value }, offline: (value: boolean) => { fail = value }, race: (value: boolean) => { race = value }, remove: () => { files = {}; revision = undefined } }
+  return {
+    remote, created, files: () => files, writes: () => writes,
+    account: (value: string) => { account = value },
+    offline: (value: boolean) => { offline = value },
+  }
 }
-const configure = (engine: ProfileSync) => engine.configure({ repository: "example/profile", selected: ["settings", "terminal", "skills", "instructions"], allowMachinePaths: false })
+
+async function machine(remote: SyncRemote) {
+  const root = await mkdtemp(join(tmpdir(), "novaspace-sync-")); temporary.push(root)
+  const paths = pathsIn(join(root, "novaspace"), join(root, "state"))
+  await mkdir(paths.cards, { recursive: true })
+  const engine = new CardSync(paths, remote)
+  const write = async (key: string, content: string) => {
+    const path = join(paths.root, key)
+    await mkdir(join(path, ".."), { recursive: true })
+    await writeFile(path, content)
+  }
+  const read = (key: string) => readFile(join(paths.root, key), "utf8").catch(() => undefined)
+  return { engine, paths, write, read }
+}
+
+const layout = (value: object) => JSON.stringify({ version: 1, ...value })
+const card = (title: string) => `export default { apiVersion: 1, title: ${JSON.stringify(title)}, render() { return null } }\n`
 
 test("accepts managed GitHub usernames and rejects malformed repository targets", () => {
-  expect(validRepository(" brunobett_microsoft/opencode-profile ")).toBe("brunobett_microsoft/opencode-profile")
-  expect(validRepository("brnbtt/opencode-profile")).toBe("brnbtt/opencode-profile")
+  expect(validRepository(" brunobett_microsoft/novaspace-cards ")).toBe("brunobett_microsoft/novaspace-cards")
   for (const value of ["owner", "owner/repo/extra", "owner/repo?ref=main", "owner name/repo", "-owner/repo"]) expect(() => validRepository(value)).toThrow("owner/repository")
 })
 
-test("two machines converge, preserve unselected files, restore deletions with backups, and pause on conflicts", async () => {
-  const host = server(), a = await machine(host.remote), b = await machine(host.remote)
-  await writeFile(join(a.paths.config, "opencode.jsonc"), '{"model":"example/model-one","plugins":["opencode-novaspace"],"mcp":{"servers":{}}}')
-  await writeFile(join(a.paths.config, "cli.json"), '{"theme":{"name":"light"}}')
-  await mkdir(join(a.paths.config, "themes"))
-  await writeFile(join(a.paths.config, "themes/custom.json"), '{"base":{}}')
-  await writeFile(join(a.paths.config, "service.json"), '{"local":"never-sync"}')
-  await mkdir(join(a.paths.home, ".agents/skills/review"), { recursive: true })
-  await writeFile(join(a.paths.home, ".agents/skills/review/SKILL.md"), "Review code")
-  await writeFile(join(a.paths.home, ".agents/skills/review/check.sh"), "#!/bin/sh\ntrue\n", { mode: 0o700 })
-  await configure(a); await configure(b)
-  expect((await a.sync()).status).toBe("synced")
-  expect((await b.sync()).status).toBe("synced")
-  expect(await readFile(join(b.paths.config, "opencode.jsonc"), "utf8")).toContain("model-one")
-  expect(await readFile(join(b.paths.home, ".agents/skills/review/SKILL.md"), "utf8")).toBe("Review code")
-  expect(Object.keys(host.files())).toHaveLength(5)
-  expect(await readFile(join(b.paths.config, "themes/custom.json"), "utf8")).toBe('{"base":{}}')
-  expect((await stat(join(b.paths.home, ".agents/skills/review/check.sh"))).mode & 0o100).toBe(0o100)
-  await chmod(join(a.paths.home, ".agents/skills/review/check.sh"), 0o600)
-  await a.sync(); await b.sync()
-  expect((await stat(join(b.paths.home, ".agents/skills/review/check.sh"))).mode & 0o111).toBe(0)
-  expect(host.files()["config/service.json"]).toBeUndefined()
-  const writes = host.writes()
-  await a.sync(); await b.sync()
-  expect(host.writes()).toBe(writes)
+test("two machines share cards and their layout, propagate edits and deletions, and keep backups", async () => {
+  const hub = server()
+  const a = await machine(hub.remote), b = await machine(hub.remote)
+  await a.write("cards/hello/index.js", card("Hello"))
+  await a.write("cards/hello/data.js", "export const data = 1\n")
+  await a.write("cards/shared.js", "export const shared = true\n")
+  await a.write("layout.json", layout({ cards: ["account", "custom:hello"], pins: { "custom:hello": "bottom" } }))
+  await b.write("cards/local/index.js", card("Local"))
 
-  await writeFile(join(a.paths.config, "cli.json"), '{"theme":{"name":"dark"}}')
-  await writeFile(join(b.paths.config, "AGENTS.md"), "Keep changes focused")
-  await a.sync(); await b.sync(); await a.sync()
-  expect(await readFile(join(b.paths.config, "cli.json"), "utf8")).toContain("dark")
-  expect(await readFile(join(a.paths.config, "AGENTS.md"), "utf8")).toBe("Keep changes focused")
+  const first = await a.engine.connect({ repository: "example/novaspace-cards", create: true })
+  expect(hub.created).toEqual(["example/novaspace-cards"])
+  expect(first.status).toBe("synced")
+  expect(first.automatic).toBe(true)
+  expect(first.message).toBe("1 card synced")
+  expect(Object.keys(hub.files()).sort()).toEqual(["cards/hello/data.js", "cards/hello/index.js", "cards/shared.js", "layout.json"])
 
-  await writeFile(join(a.paths.config, "cli.json"), '{"theme":{"name":"a"}}')
-  await writeFile(join(b.paths.config, "cli.json"), '{"theme":{"name":"b"}}')
-  await a.sync()
-  expect((await b.sync()).conflicts).toEqual(["config/cli.json"])
-  expect(await readFile(join(b.paths.config, "cli.json"), "utf8")).toContain('"b"')
-  expect((await b.sync("remote")).status).toBe("synced")
-  expect(await readFile(join(b.paths.config, "cli.json"), "utf8")).toContain('"a"')
-  expect((await readdir(join(b.paths.state, "backups"))).length).toBeGreaterThan(0)
+  const changes: string[][] = []
+  b.engine.subscribe((_state, changed) => { if (changed.length) changes.push([...changed]) })
+  const joined = await b.engine.connect({ repository: "example/novaspace-cards" })
+  expect(joined.status).toBe("synced")
+  expect(await b.read("cards/hello/index.js")).toBe(card("Hello"))
+  expect(await b.read("cards/local/index.js")).toBe(card("Local"))
+  expect(changes).toEqual([["cards/hello/data.js", "cards/hello/index.js", "cards/shared.js", "layout.json"]])
+  expect(Object.keys(hub.files())).toContain("cards/local/index.js")
 
-  await unlink(join(a.paths.config, "AGENTS.md")); await a.sync(); await b.sync()
-  expect(await Bun.file(join(b.paths.config, "AGENTS.md")).exists()).toBe(false)
-  await b.configure({ repository: "example/profile", selected: ["instructions"], allowMachinePaths: false })
-  await writeFile(join(b.paths.config, "cli.json"), "local-only")
-  await b.sync()
-  expect(Buffer.from(host.files()["config/cli.json"]!, "base64").toString()).toContain('"a"')
+  // Rearranging on both machines merges per field, without a conflict.
+  await b.write("cards/hello/index.js", card("Hello again"))
+  await b.write("layout.json", layout({ cards: ["account", "custom:hello", "custom:local"], pins: { "custom:hello": "bottom" }, hidden: ["session-info"] }))
+  await a.write("layout.json", layout({ cards: ["account", "custom:hello"], pins: { "custom:hello": false } }))
+  expect((await b.engine.sync()).status).toBe("synced")
+  const merged = await a.engine.sync()
+  expect(merged.status).toBe("synced")
+  expect(await a.read("cards/hello/index.js")).toBe(card("Hello again"))
+  expect(JSON.parse((await a.read("layout.json"))!)).toEqual({ version: 1, cards: ["account", "custom:hello", "custom:local"], pins: { "custom:hello": false }, hidden: ["session-info"] })
+  const backups = join(a.paths.state, "backups")
+  const [stamp] = await readdir(backups)
+  expect(await readFile(join(backups, stamp!, "cards/hello/index.js"), "utf8")).toBe(card("Hello"))
+
+  // Deleting a card folder removes it everywhere, folder included.
+  await rm(join(a.paths.cards, "hello"), { recursive: true })
+  await a.engine.sync()
+  await b.engine.sync()
+  expect(await stat(join(b.paths.cards, "hello")).catch(() => undefined)).toBeUndefined()
+  expect(await b.read("cards/shared.js")).toBe("export const shared = true\n")
 })
 
-test("automatic loop syncs while running and respects pause, account switches, offline failures and remote races", async () => {
-  const host = server(), a = await machine(host.remote)
-  await configure(a)
-  await writeFile(join(a.paths.config, "AGENTS.md"), "one")
-  await a.sync(); await a.automatic(true)
-  // Expire the shared cross-process attempt throttle for the timer test.
-  const state = await a.state(); state.lastAttemptAt = 0
-  await writeFile(join(a.paths.state, "sync.json"), JSON.stringify(state))
-  await writeFile(join(a.paths.config, "AGENTS.md"), "two")
-  const stop = a.start(10)
-  try {
-    for (let i = 0; i < 100 && Buffer.from(host.files()["config/AGENTS.md"]!, "base64").toString() !== "two"; i++) await Bun.sleep(10)
-    expect(Buffer.from(host.files()["config/AGENTS.md"]!, "base64").toString()).toBe("two")
-  } finally { await stop() }
-  await a.automatic(false)
-  const writes = host.writes()
-  await writeFile(join(a.paths.config, "AGENTS.md"), "three")
-  await a.sync(undefined, true)
-  expect(host.writes()).toBe(writes)
-  host.account("other")
-  expect((await a.sync()).message).toContain("switch GitHub back")
-  host.account("example"); host.offline(true)
-  expect((await a.sync()).status).toBe("error")
-  host.offline(false); host.race(true)
-  expect((await a.sync()).message).toContain("409")
-  expect((await a.state()).base["config/AGENTS.md"]).toBe(Buffer.from("two").toString("base64"))
-  host.race(false)
-  expect((await a.sync()).status).toBe("synced")
-  host.remove()
-  expect((await a.sync()).message).toContain("disappeared")
-  expect(await readFile(join(a.paths.config, "AGENTS.md"), "utf8")).toBe("three")
+test("pauses on a conflict and resolves it with either machine's version", async () => {
+  const hub = server()
+  const a = await machine(hub.remote), b = await machine(hub.remote)
+  await a.write("cards/hello/index.js", card("Base"))
+  await a.engine.connect({ repository: "example/cards" })
+  await b.engine.connect({ repository: "example/cards" })
+  await a.write("cards/hello/index.js", card("From A"))
+  await b.write("cards/hello/index.js", card("From B"))
+  await a.engine.sync()
+
+  const conflict = await b.engine.sync()
+  expect(conflict.status).toBe("conflict")
+  expect(conflict.conflicts).toEqual(["cards/hello/index.js"])
+  expect(await b.read("cards/hello/index.js")).toBe(card("From B"))
+  // The automatic loop waits for a decision.
+  expect((await b.engine.sync(undefined, true)).status).toBe("conflict")
+
+  expect((await b.engine.sync("remote")).status).toBe("synced")
+  expect(await b.read("cards/hello/index.js")).toBe(card("From A"))
+
+  await a.write("cards/hello/index.js", card("A again"))
+  await b.write("cards/hello/index.js", card("B wins"))
+  await a.engine.sync()
+  expect((await b.engine.sync()).status).toBe("conflict")
+  expect((await b.engine.sync("local")).status).toBe("synced")
+  expect(decodeFile(hub.files()["cards/hello/index.js"]!).toString()).toBe(card("B wins"))
 })
 
-test("rejects invalid paths and automatically keeps private settings local", async () => {
-  expect(() => validateSnapshot({ "config/skills/../../service.json": "" })).toThrow()
-  expect(() => validateSnapshot({ "config/service.json": "" })).toThrow()
-  expect(() => validateSnapshot({ "config/skills/A": "", "config/skills/a": "" })).toThrow("Case-colliding")
-  expect(() => validateSnapshot({ "config/skills/a": "", "config/skills/a/b": "" })).toThrow("Overlapping")
-  const host = server(), a = await machine(host.remote)
-  await configure(a)
-  await writeFile(join(a.paths.config, "opencode.json"), '{"apiKey":"literal-secret"}')
-  expect((await a.sync()).status).toBe("synced")
-  expect(await readFile(join(a.paths.config, "opencode.json"), "utf8")).toBe('{"apiKey":"literal-secret"}')
-  expect(Buffer.from(host.files()["config/opencode.json"]!, "base64").toString()).not.toContain("literal-secret")
-  await writeFile(join(a.paths.config, "opencode.json"), '{"plugins":["/Users/someone/local-plugin"]}')
-  expect((await a.sync()).status).toBe("synced")
-  expect(await readFile(join(a.paths.config, "opencode.json"), "utf8")).toContain("/Users/someone/local-plugin")
-  expect(Buffer.from(host.files()["config/opencode.json"]!, "base64").toString()).not.toContain("/Users/")
-  await mkdir(join(a.paths.config, "skills"))
-  await symlink(join(a.paths.config, "opencode.json"), join(a.paths.config, "skills/link"))
-  await expect(collectFiles(a.paths, ["skills"])).rejects.toThrow("Symlink")
+test("keeps credentials, links and oversized files on this machine, whole card folders included", async () => {
+  const hub = server()
+  const a = await machine(hub.remote)
+  await a.write("cards/safe/index.js", card("Safe"))
+  await a.write("cards/secret/index.js", card("Secret"))
+  await a.write("cards/secret/config.js", 'export const token = "ghp_abcdefghijklmnopqrstuvwxyz0123456789"\n')
+  await a.write("cards/env/index.js", 'const key = process.env.API_KEY\nexport default { apiKey: "{env:API_KEY}" }\n')
+  await a.write("cards/big/index.js", "x".repeat(600_000))
+  await mkdir(join(a.paths.root, "..", "elsewhere"), { recursive: true })
+  await writeFile(join(a.paths.root, "..", "elsewhere", "index.js"), card("Linked"))
+  await symlink(join(a.paths.root, "..", "elsewhere"), join(a.paths.cards, "linked"))
+
+  const { files, keptLocal } = await collectFiles(a.paths)
+  expect(Object.keys(files).sort()).toEqual(["cards/env/index.js", "cards/safe/index.js"])
+  expect(keptLocal.map((entry) => entry.path).sort()).toEqual(["cards/big", "cards/big/index.js", "cards/linked", "cards/secret", "cards/secret/config.js"])
+
+  const synced = await a.engine.connect({ repository: "example/cards" })
+  expect(synced.message).toBe("2 cards synced · 5 kept on this machine")
+  expect(Object.keys(hub.files()).sort()).toEqual(["cards/env/index.js", "cards/safe/index.js"])
+  // Local-only cards are left exactly as they are.
+  expect(await a.read("cards/secret/index.js")).toBe(card("Secret"))
+  expect(validateSnapshot.bind(null, { "cards/../escape.js": "" })).toThrow("Invalid card file")
+  expect(validateSnapshot.bind(null, { "settings/opencode.json": "" })).toThrow("Invalid card file")
 })
 
-test("holds one cross-process lease and preserves existing files on first-connection conflicts", async () => {
-  const host = server(), a = await machine(host.remote), b = await machine(host.remote)
-  await configure(a); await configure(b)
-  await writeFile(join(a.paths.config, "cli.json"), '{"theme":"remote"}')
-  await writeFile(join(b.paths.config, "cli.json"), '{"theme":"local"}')
-  await a.sync()
-  expect((await b.sync()).status).toBe("conflict")
-  expect(await readFile(join(b.paths.config, "cli.json"), "utf8")).toBe('{"theme":"local"}')
-  expect((await b.sync("local")).status).toBe("synced")
-  const lease = new Database(join(b.paths.state, "lease.sqlite"))
+test("pauses when the GitHub account changes, reports outages and runs automatically once a minute", async () => {
+  const hub = server()
+  const a = await machine(hub.remote)
+  await a.write("cards/hello/index.js", card("Hello"))
+  await a.engine.connect({ repository: "example/cards" })
+
+  hub.account("someone-else")
+  const paused = await a.engine.sync()
+  expect(paused.status).toBe("paused")
+  expect(paused.message).toContain("@example")
+  hub.account("example")
+
+  hub.offline(true)
+  const offline = await a.engine.sync()
+  expect(offline.status).toBe("error")
+  expect(offline.message).toBe("Offline")
+  hub.offline(false)
+
+  // Automatic runs are throttled across windows by the shared last-attempt time.
+  const writes = hub.writes()
+  await a.write("cards/hello/index.js", card("Edited"))
+  expect((await a.engine.sync(undefined, true)).lastAttemptAt).toBe(offline.lastAttemptAt)
+  expect(hub.writes()).toBe(writes)
+  await a.engine.setAutomatic(false)
+  const state = JSON.parse(await readFile(join(a.paths.state, "cards-sync.json"), "utf8")) as SyncState
+  await writeFile(join(a.paths.state, "cards-sync.json"), JSON.stringify({ ...state, lastAttemptAt: 0 }))
+  expect((await a.engine.sync(undefined, true)).status).toBe("error")
+  await a.engine.setAutomatic(true)
+  await writeFile(join(a.paths.state, "cards-sync.json"), JSON.stringify({ ...(await a.engine.state()), lastAttemptAt: 0 }))
+  const stop = a.engine.start(60_000)
+  await stop()
+  expect(hub.writes()).toBe(writes + 1)
+  expect((await a.engine.state()).status).toBe("synced")
+
+  expect((await a.engine.disconnect()).repository).toBeUndefined()
+  expect((await a.engine.sync()).status).toBe("unconfigured")
+})
+
+test("holds one cross-process lease", async () => {
+  const hub = server()
+  const a = await machine(hub.remote)
+  await a.engine.connect({ repository: "example/cards" })
+  const lease = new Database(join(a.paths.state, "lease.sqlite"))
   lease.exec("BEGIN IMMEDIATE")
-  try { await expect(b.sync()).rejects.toThrow("Another novaSpace") }
-  finally { lease.exec("ROLLBACK"); lease.close() }
+  try {
+    await expect(a.engine.sync()).rejects.toThrow("Another OpenCode window is syncing cards")
+  } finally {
+    lease.exec("ROLLBACK")
+    lease.close()
+  }
+})
+
+test("merges layout fields independently and prefers this machine on a collision", () => {
+  const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64")
+  const read = (value?: string) => JSON.parse(decodeFile(value!).toString())
+  const base = encode({ version: 1, cards: ["a", "b"], pins: { a: "top", b: false } })
+  const local = encode({ version: 1, cards: ["b", "a"], pins: { a: "top", b: "bottom" } })
+  const remote = encode({ version: 1, cards: ["a", "b", "c"], pins: { a: false, b: false }, hidden: ["c"] })
+  expect(read(mergeLayout(base, local, remote))).toEqual({ version: 1, cards: ["b", "a"], pins: { a: false, b: "bottom" }, hidden: ["c"] })
+  expect(mergeLayout(base, local, local)).toBe(local)
+  expect(mergeLayout(undefined, undefined, remote)).toBe(remote)
 })

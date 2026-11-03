@@ -51,12 +51,6 @@ export type Theme = {
   }
 }
 
-type Response<T> = {
-  // OpenCode 2.0.14 no longer includes project.
-  location: Location & { project?: { directory: string; canonical: string } }
-  data: T
-}
-
 type LocationCollection<T> = {
   sync?(location: Location): Promise<void>
   list(location: Location): readonly T[] | undefined
@@ -73,10 +67,6 @@ export type TuiContext = {
     store<T extends object>(key: string, options: { initial: T }): [T, (update: (draft: T) => void) => Promise<void>]
   }
   client: {
-    vcs: {
-      get(input: { location: Location }, options?: { signal: AbortSignal }): Promise<Response<{ branch: { current?: string } }>>
-      status(input: { location: Location }, options?: { signal: AbortSignal }): Promise<Response<readonly { file: string }[]>>
-    }
     plugin?: {
       list(input: { location: Location }): Promise<{ data: readonly {
         id: string
@@ -87,39 +77,12 @@ export type TuiContext = {
       check?(input: { target?: string }): Promise<unknown>
       update?(input: { targets: readonly string[] }): Promise<unknown>
     }
-    config?: {
-      get(input: { location: Location }): Promise<{ data: readonly {
-        type?: string
-        path?: string
-        info?: {
-          model?: { providerID?: string; model?: string }
-          update?: string
-          formatter?: boolean
-          websearch?: { provider?: string }
-          worktree?: { directory?: string }
-          permissions?: readonly { action?: string; resource?: string; effect?: string }[]
-          providers?: Record<string, unknown>
-          references?: Record<string, unknown>
-        }
-      }[] }>
-    }
   }
   data: {
     location: {
       default(): Location
       vcs?: { info(location: Location): { branch: { current?: string } } | undefined }
-      skill?: LocationCollection<{ id?: string; name?: string; description?: string; location?: string }>
-      agent?: LocationCollection<{
-        id?: string
-        description?: string
-        mode?: string
-        model?: { id?: string; providerID?: string; variant?: string }
-      }>
-      command?: LocationCollection<{ name?: string; description?: string }>
       model?: LocationCollection<{ id?: string; providerID?: string; limit?: { context?: number } }>
-      provider?: LocationCollection<{ id?: string; name?: string }>
-      reference?: LocationCollection<{ name?: string; description?: string }>
-      mcp?: { server?: LocationCollection<{ name?: string; status?: { status?: string } | string; error?: string }> }
     }
     session: {
       get(id: string): Session | undefined

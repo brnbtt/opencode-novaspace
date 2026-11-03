@@ -30,47 +30,15 @@ export function context(dialogRender?: (render: () => JSX.Element) => void): Tui
     options: {},
     theme,
     client: {
-      vcs: {
-        async get() { return { location: { ...session.location, project: { directory: session.location.directory, canonical: session.location.directory } }, data: { branch: { current: "main" } } } },
-        async status() { return { location: { ...session.location, project: { directory: session.location.directory, canonical: session.location.directory } }, data: [] } },
-      },
       plugin: { async list() { return { data: [
         { id: "opencode.core", source: { type: "builtin" } },
         { id: "novaspace", source: { type: "local", path: "/plugins/novaspace" }, features: { server: true, tui: true }, state: { status: "active" } },
       ] } } },
-      config: { async get() { return { data: [{
-        type: "document",
-        path: "/Users/example/.config/opencode/opencode.jsonc",
-        info: {
-          model: { providerID: "github-copilot", model: "gpt-5.6-sol" },
-          update: "auto",
-          formatter: true,
-          websearch: { provider: "parallel" },
-          worktree: { directory: "/Users/example/DEV/worktrees" },
-          permissions: [{ action: "browser", resource: "*", effect: "deny" }],
-          providers: { "github-copilot": {} },
-        },
-      }] } } },
     },
     data: {
       location: {
         default: () => session.location,
-        skill: collection(Array.from({ length: 10 }, (_, index) => ({ id: `skill-${index}`, name: `skill-${index}`, description: `Skill ${index}` }))),
-        agent: collection([
-          { id: "build" },
-          { id: "advisor", mode: "subagent", model: { id: "gpt-6-astra", providerID: "github-copilot", variant: "max" } },
-          { id: "deep-sol", mode: "subagent", model: { id: "gpt-5.6-sol", providerID: "github-copilot", variant: "max" } },
-          { id: "deep-opus", mode: "subagent" },
-          { id: "fast-gemini", mode: "subagent" },
-        ]),
-        command: collection([{ name: "init" }, { name: "review" }]),
-        provider: collection([{ id: "github-copilot", name: "GitHub Copilot" }]),
-        reference: collection([]),
         model: collection([{ id: "gpt-5.6-sol", providerID: "github-copilot", limit: { context: 1_050_000 } }]),
-        mcp: { server: collection([
-          { name: "agency-gateway", status: { status: "connected" } },
-          { name: "playwright", status: { status: "connected" } },
-        ]) },
       },
       session: {
         get: () => session,

@@ -1,9 +1,13 @@
-import { expect, test } from "bun:test"
+import { afterEach, beforeEach, expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { createLayoutController } from "../src/layout"
 import { CardCarousel } from "../src/carousel"
-import "./custom-cards.fixture"
+import { stubCards } from "./custom-cards.fixture"
 import { context } from "./support"
+
+let unstub = () => {}
+beforeEach(() => { unstub = stubCards("custom:working-set", "custom:subagents") })
+afterEach(() => unstub())
 
 test("carousel pills and dots switch bounded pages and disappear for a single page", async () => {
   const ctx = context()

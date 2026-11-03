@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { afterEach, beforeEach, expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { createSignal, onCleanup } from "solid-js"
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
@@ -7,8 +7,12 @@ import { createLayoutController } from "../src/layout"
 import { Sidebar, SidebarFooter } from "../src/tui"
 import { createSidebarDrag, type SidebarDrag } from "../src/drag"
 import { DragOverlay } from "../src/drag-overlay"
-import "./custom-cards.fixture"
+import { stubCards } from "./custom-cards.fixture"
 import { context, theme } from "./support"
+
+let unstub = () => {}
+beforeEach(() => { unstub = stubCards("custom:working-set", "custom:subagents") })
+afterEach(() => unstub())
 
 async function dragFixture(bottom = true, height = 40) {
   const ctx = context()
@@ -55,7 +59,7 @@ test("dragging real card grips reorders, previews pinning, and unpins back into 
     const frame = await view.waitForFrame((value) => value.includes("Subagents"))
     expect(frame).not.toContain("⇩")
     expect(frame).not.toContain("↑")
-    expect(frame).toContain("⠿ Subagents")
+    expect(frame).toContain("Subagents ⠿")
     await press("custom:subagents")
     expect(drag.gesture()?.id).toBe("custom:subagents")
     expect(view.renderer.hasSelection).toBe(false)
@@ -68,7 +72,7 @@ test("dragging real card grips reorders, previews pinning, and unpins back into 
     expect(floating.height).toBe(node("card-custom:subagents").height)
     expect(node("card-custom:subagents").opacity).toBe(0.35)
     const previewText = view.captureCharFrame().split("\n").slice(floating.y, floating.y + floating.height).map((line) => line.slice(floating.x, floating.x + floating.width)).join("\n")
-    expect(previewText).toContain("⠿ Subagents")
+    expect(previewText).toContain("Subagents ⠿")
     expect(previewText).toContain("No subagents yet.")
     expect(controller.layout().scroll.map((card) => card.id)).toEqual(["custom:working-set", "custom:subagents"])
     await view.mockMouse.release(first.x + 3, first.y)
@@ -95,7 +99,7 @@ test("dragging real card grips reorders, previews pinning, and unpins back into 
     const dot = node("sidebar-page-session-info")
     await view.mockMouse.emitMouseEvent("drag", dot.x, dot.y)
     await view.flush()
-    expect(view.captureCharFrame()).toContain("Move before Session info")
+    expect(view.captureCharFrame()).toContain("Move before Session")
     await view.mockMouse.release(dot.x, dot.y)
     await view.flush()
     expect(controller.layout().bottom.map((card) => card.id)).toEqual(["custom:subagents", "session-info"])
@@ -257,10 +261,10 @@ test("dragging supports an empty footer and cancels without changing the saved l
     await view.mockMouse.release(empty.x + 4, empty.y + 2)
     await view.flush()
     expect(controller.activeBottom()).toBe("custom:subagents")
-    await controller.place("setup", "bottom")
-    expect(controller.options().pins.setup).toBe("top")
-    await controller.pin("setup", false)
-    expect(controller.options().pins.setup).toBe("top")
+    await controller.place("account", "bottom")
+    expect(controller.options().pins.account).toBe("top")
+    await controller.pin("account", false)
+    expect(controller.options().pins.account).toBe("top")
     await controller.place("custom:subagents", false)
     expect(controller.layout().scroll.some((card) => card.id === "custom:subagents")).toBe(true)
   } finally { view.renderer.destroy() }

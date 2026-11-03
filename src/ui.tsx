@@ -2,14 +2,14 @@
 import { MouseButton, parseColor, RGBA, type BoxRenderable, type ScrollBoxOptions } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createSignal, onCleanup, onMount, untrack, Show, type JSX } from "solid-js"
-import type { Theme, TuiContext } from "./types"
+import type { Color, Theme, TuiContext } from "./types"
 import type { CardDragBinding } from "./drag"
 
 export const novaMark = "✧"
 
-function mix(from: RGBA, to: RGBA, amount: number) {
-  const [fr, fg, fb] = from.toInts()
-  const [tr, tg, tb] = to.toInts()
+export function mix(from: Color, to: Color, amount: number) {
+  const [fr, fg, fb] = parseColor(from).toInts()
+  const [tr, tg, tb] = parseColor(to).toInts()
   return RGBA.fromInts(
     Math.round(fr + (tr - fr) * amount),
     Math.round(fg + (tg - fg) * amount),
@@ -18,42 +18,39 @@ function mix(from: RGBA, to: RGBA, amount: number) {
 }
 
 export function cardSurface(theme: Theme, strength: number) {
-  return mix(parseColor(theme.background.base), parseColor(theme.background.action.primary.hovered), strength)
+  return mix(theme.background.base, theme.background.action.primary.hovered, strength)
 }
 
 export function cardBorder(theme: Theme) {
-  return theme.border?.base ?? mix(parseColor(theme.background.base), parseColor(theme.text.muted), 0.55)
+  return theme.border?.base ?? mix(theme.background.base, theme.text.muted, 0.55)
 }
 
-/** Text edges respect scroll clipping in both the host and test renderer. Native
- * drawBox borders bypass scissor clipping; buffered borders disappear in the host.
- * Box-drawing glyphs sit mid-cell, so any fill leaks past the line or leaves a gap
- * inside it. Eighth blocks sit on cell edges instead: the side lines hug the
- * interior from the outer columns, and the top/bottom lines cap filled rows. */
-export function cardFrame(theme: () => Theme, surface: () => RGBA) {
+/** Text that recedes further than `muted`: hints, separators, idle grips. */
+export function faint(theme: Theme) {
+  return mix(theme.background.base, theme.text.muted, 0.6)
+}
+
+export type Tone = "neutral" | "info" | "success" | "warning" | "error"
+export function toneColor(theme: Theme, tone: Tone) {
+  return tone === "neutral" ? theme.text.muted : theme.text.feedback[tone].base
+}
+
+/**
+ * Cards follow OpenCode's own surface language: an elevated fill with a single
+ * left accent edge instead of a full box. The edge is a column of text cells,
+ * which respect scroll clipping in the host; native box borders do not.
+ */
+function cardEdge(color: () => Color, surface: () => RGBA) {
   let root: BoxRenderable | undefined
-  const [size, setSize] = createSignal({ width: 0, height: 0 })
-  const measure = () => { if (root) setSize({ width: root.width, height: root.height }) }
+  const [height, setHeight] = createSignal(0)
+  const measure = () => { if (root) setHeight(root.height) }
   onMount(measure)
-  const inner = () => Math.max(0, size().width - 2)
-  const side = (glyph: string) => Array(size().height).fill(glyph).join("\n")
   return {
     ref(value: BoxRenderable) { root = value }, measure,
-    edges: () => <Show when={size().width >= 2 && size().height >= 2}>
-      <text position="absolute" left={1} top={0} height={1} width={inner()} zIndex={1} selectable={false} fg={cardBorder(theme())} bg={surface()}>{"▔".repeat(inner())}</text>
-      <text position="absolute" left={1} bottom={0} height={1} width={inner()} zIndex={1} selectable={false} fg={cardBorder(theme())} bg={surface()}>{"▁".repeat(inner())}</text>
-      <text position="absolute" left={0} top={0} width={1} height={size().height} zIndex={1} selectable={false} fg={cardBorder(theme())}>{side("▕")}</text>
-      <text position="absolute" right={0} top={0} width={1} height={size().height} zIndex={1} selectable={false} fg={cardBorder(theme())}>{side("▏")}</text>
+    edge: () => <Show when={height() > 0}>
+      <text position="absolute" left={0} top={0} width={1} height={height()} zIndex={1} selectable={false} fg={color()} bg={surface()}>{Array(height()).fill("▎").join("\n")}</text>
     </Show>,
   }
-}
-
-export function Panel(props: { id?: string; theme: Theme; strength: number; marginBottom?: number; children: JSX.Element }) {
-  const frame = cardFrame(() => props.theme, () => cardSurface(props.theme, props.strength))
-  return <box id={props.id} ref={frame.ref} onSizeChange={frame.measure} flexDirection="column" padding={1} marginBottom={props.marginBottom}>
-    <box flexDirection="column" paddingLeft={1} paddingRight={1} backgroundColor={cardSurface(props.theme, props.strength)}>{props.children}</box>
-    {frame.edges()}
-  </box>
 }
 
 export function nativeScrollbar(theme: Theme): ScrollBoxOptions["verticalScrollbarOptions"] {
@@ -85,7 +82,7 @@ export function Divider(props: { theme: Theme; strong?: boolean }) {
       flexShrink={0}
       border={["top"]}
       borderStyle="single"
-      borderColor={props.strong ? mix(parseColor(props.theme.background.base), parseColor(props.theme.text.muted), 0.55) : cardSurface(props.theme, 0.18)}
+      borderColor={props.strong ? cardBorder(props.theme) : cardSurface(props.theme, 0.18)}
     />
   )
 }
@@ -95,6 +92,8 @@ export function Card(props: {
   strength: number
   hoverStrength?: number
   hoverDuration?: number
+  /** Colour of the left edge while the card is idle; it lights up on hover. */
+  accent?: Color
   onPress?: () => void
   onHoverChange?: (hovered: boolean) => void
   children: JSX.Element
@@ -124,7 +123,11 @@ export function Card(props: {
     onCleanup(() => clearInterval(timer))
   })
   const strength = () => Math.min(1, props.strength + (props.hoverStrength ?? 0.08) * progress())
-  const frame = cardFrame(() => props.theme, () => cardSurface(props.theme, strength()))
+  const surface = () => cardSurface(props.theme, strength())
+  const edgeColor = () => hovered() && (props.onPress || props.hoverStrength !== 0)
+    ? props.theme.text.feedback.info.base
+    : props.accent ?? cardBorder(props.theme)
+  const frame = cardEdge(edgeColor, surface)
   const lifted = () => !!props.drag && props.drag.manager.gesture()?.id === props.drag.id
     && props.drag.manager.forSession(props.drag.sessionID) && props.drag.manager.gesture()?.moved
   return (
@@ -133,7 +136,11 @@ export function Card(props: {
       onSizeChange={frame.measure}
       id={props.drag ? `card-${props.drag.id}` : undefined}
       flexDirection="column"
-      padding={1}
+      paddingTop={1}
+      paddingBottom={1}
+      paddingLeft={2}
+      paddingRight={2}
+      backgroundColor={surface()}
       opacity={lifted() ? 0.35 : 1}
       marginBottom={props.marginBottom ?? 0}
       onMouseOver={() => {
@@ -153,8 +160,8 @@ export function Card(props: {
         if (event.button === MouseButton.LEFT && !event.isDragging) props.onPress?.()
       }}
     >
-      <box flexDirection="column" paddingLeft={1} paddingRight={1} backgroundColor={cardSurface(props.theme, strength())}>{props.children}</box>
-      {frame.edges()}
+      {props.children}
+      {frame.edge()}
     </box>
   )
 }
@@ -163,16 +170,37 @@ export function CardTitle(props: { theme: Theme; title: string; drag?: CardDragB
   const [hovered, setHovered] = createSignal(false)
   return (
     <box flexDirection="row" minWidth={0}>
+      <text minWidth={0} flexShrink={1} wrapMode="none" truncate fg={props.theme.text.base}><b>{props.title}</b></text>
       <Show when={props.drag}>{(drag) => (
         <box
-          id={`card-${drag().id}-handle`} width={2} height={1} flexShrink={0}
+          id={`card-${drag().id}-handle`} width={2} height={1} flexShrink={0} paddingLeft={1}
           onMouseOver={() => setHovered(true)} onMouseOut={() => setHovered(false)}
           onMouseDown={(event) => drag().manager.start(drag().sessionID, drag().id, event)}
         >
-          <text selectable={false} fg={hovered() ? props.theme.text.feedback.info.base : props.theme.text.muted}>⠿</text>
+          <text selectable={false} fg={hovered() ? props.theme.text.feedback.info.base : faint(props.theme)}>⠿</text>
         </box>
       )}</Show>
-      <text minWidth={0} wrapMode="none" truncate fg={props.theme.text.base}><b>{props.title}</b></text>
+    </box>
+  )
+}
+
+/**
+ * A one-row horizontal meter that fills the available width, for usage,
+ * quota and progress. `value` is a fraction from 0 to 1. The default tone
+ * turns warning at 80% and error at 90%.
+ */
+export function Meter(props: { theme: Theme; value: number; tone?: Tone }) {
+  let root: BoxRenderable | undefined
+  const [width, setWidth] = createSignal(0)
+  const measure = () => { if (root) setWidth(root.width) }
+  onMount(measure)
+  const value = () => Math.max(0, Math.min(1, Number.isFinite(props.value) ? props.value : 0))
+  const filled = () => Math.round(width() * value())
+  const tone = (): Tone => props.tone ?? (value() >= 0.9 ? "error" : value() >= 0.8 ? "warning" : "info")
+  return (
+    <box ref={(node) => { root = node }} onSizeChange={measure} flexDirection="row" height={1} flexShrink={0} width="100%">
+      <Show when={filled() > 0}><text selectable={false} wrapMode="none" fg={toneColor(props.theme, tone())}>{"━".repeat(filled())}</text></Show>
+      <Show when={width() - filled() > 0}><text selectable={false} wrapMode="none" fg={cardBorder(props.theme)}>{"━".repeat(width() - filled())}</text></Show>
     </box>
   )
 }

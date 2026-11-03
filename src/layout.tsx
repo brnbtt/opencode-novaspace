@@ -1,57 +1,78 @@
 /** @jsxImportSource @opentui/solid */
 import { createMemo } from "solid-js"
 // .tsx selects OpenCode 2.0.7's host-Solid import rewrite for this reactive helper.
-import { createStore, produce } from "solid-js/store"
-import { isCardID, isCustomCardID, resolveOptions, type CardID, type CardPin } from "./config"
-import { partitionCards } from "./cards/registry"
+import { createStore, produce, unwrap } from "solid-js/store"
+import { cardID, cardIDList, isCardID, pinMap, resolveOptions, type CardID, type CardPin } from "./config"
+import { customCards, partitionCards } from "./cards/registry"
 import type { TuiContext } from "./types"
 
-export type LayoutPreferences = {
+/** The arrangement that follows the user between machines. */
+export type SharedLayout = {
   cards?: CardID[]
   pins?: Partial<Record<CardID, CardPin>>
   hidden?: CardID[]
-  activeBottom?: CardID
 }
+/** Everything saved locally; activeBottom never leaves this machine. */
+export type LayoutPreferences = SharedLayout & { activeBottom?: CardID }
+export type LayoutStore<T> = [T, (update: (draft: T) => void) => Promise<void>]
 
-function volatileStore(): [LayoutPreferences, (update: (draft: LayoutPreferences) => void) => Promise<void>] {
+function volatileStore(): LayoutStore<LayoutPreferences> {
   const [state, setState] = createStore<LayoutPreferences>({})
   return [state, async (update) => { setState(produce(update)) }]
 }
 
-export function createLayoutController(ctx: TuiContext) {
-  const [preferences, update] = ctx.storage?.store<LayoutPreferences>("sidebar-layout-v1", { initial: {} }) ?? volatileStore()
+/**
+ * `shared` receives the locally saved arrangement as a seed, so a layout made
+ * before it moved into the synced layout file carries over.
+ */
+export function createLayoutController(ctx: TuiContext, shared?: (seed: SharedLayout) => LayoutStore<SharedLayout>) {
+  const [local, updateLocal] = ctx.storage?.store<LayoutPreferences>("sidebar-layout-v1", { initial: {} }) ?? volatileStore()
+  const [arrangement, updateArrangement] = shared
+    ? shared(structuredClone({ cards: unwrap(local).cards, pins: unwrap(local).pins, hidden: unwrap(local).hidden }))
+    : [local, updateLocal] as LayoutStore<SharedLayout>
   const options = createMemo(() => {
     const base = resolveOptions(ctx.options)
-    // Newly configured custom cards join an existing saved layout without resetting it.
-    const saved = preferences.cards
-    const cards = saved ? [...saved, ...base.cards.filter((id) => isCustomCardID(id) && !saved.includes(id))] : base.cards
-    return resolveOptions({ ...base, cards, pins: { ...base.pins, ...preferences.pins }, hidden: preferences.hidden ?? [...base.hidden] })
+    const known = arrangement.cards ? cardIDList(arrangement.cards) : base.cards
+    // Custom cards join the end of the sidebar once they load, whether or not
+    // a layout was saved before they existed.
+    const cards = [...known, ...customCards().map((card) => card.id).filter((id) => !known.includes(id))]
+    return resolveOptions({ ...base, cards, pins: { ...base.pins, ...pinMap(arrangement.pins) }, hidden: arrangement.hidden ?? [...base.hidden] })
   })
   const layout = createMemo(() => partitionCards(options()))
-  const activeBottom = createMemo(() => layout().bottom.find((card) => card.id === preferences.activeBottom)?.id ?? layout().bottom[0]?.id)
-  const save = (mutate: (draft: LayoutPreferences) => void) => update(mutate).catch((error) => {
-    ctx.ui.toast.show({ title: "novaSpace", message: `Could not save layout: ${String(error)}`, variant: "error" })
+  const activeBottom = createMemo(() => {
+    const selected = cardID(local.activeBottom)
+    return layout().bottom.find((card) => card.id === selected)?.id ?? layout().bottom[0]?.id
   })
-  const edit = (mutate: (draft: Required<Pick<LayoutPreferences, "cards" | "pins" | "hidden">> & LayoutPreferences) => void) => {
+  const report = (error: unknown) => {
+    ctx.ui.toast.show({ title: "novaSpace", message: `Could not save layout: ${String(error)}`, variant: "error" })
+  }
+  const selectPage = (id: CardID) => updateLocal((draft) => { draft.activeBottom = id }).catch(report)
+  const edit = (mutate: (draft: Required<SharedLayout> & { activeBottom?: CardID }) => void) => {
     const current = options()
     const draft = { cards: [...current.cards], pins: { ...current.pins }, hidden: [...current.hidden], activeBottom: activeBottom() }
     mutate(draft)
-    return save((saved) => { Object.assign(saved, draft) })
+    const saves = [updateArrangement((saved) => {
+      saved.cards = draft.cards
+      saved.pins = draft.pins
+      saved.hidden = draft.hidden
+    }).catch(report)]
+    if (draft.activeBottom !== activeBottom()) saves.push(selectPage(draft.activeBottom!))
+    return Promise.all(saves).then(() => {})
   }
   return {
     options, layout, activeBottom,
     select(id: CardID) {
       if (!layout().bottom.some((card) => card.id === id)) return Promise.resolve()
-      return save((draft) => { draft.activeBottom = id })
+      return selectPage(id)
     },
     page(delta: number) {
       const pages = layout().bottom
       if (!pages.length) return Promise.resolve()
       const index = pages.findIndex((card) => card.id === activeBottom())
-      return save((draft) => { draft.activeBottom = pages[(index + delta + pages.length) % pages.length]!.id })
+      return selectPage(pages[(index + delta + pages.length) % pages.length]!.id)
     },
     move(id: CardID, delta: -1 | 1) {
-      if (id === "setup") return Promise.resolve()
+      if (id === "account") return Promise.resolve()
       return edit((draft) => {
         const group = draft.cards.filter((card) => !draft.hidden.includes(card) && draft.pins[card] === draft.pins[id])
         const other = group[group.indexOf(id) + delta]
@@ -62,7 +83,7 @@ export function createLayoutController(ctx: TuiContext) {
       })
     },
     pin(id: CardID, pin: CardPin) {
-      if (!isCardID(id) || id === "setup") return Promise.resolve()
+      if (!isCardID(id) || id === "account") return Promise.resolve()
       return edit((draft) => {
         if (!draft.cards.includes(id)) draft.cards.push(id)
         draft.hidden = draft.hidden.filter((card) => card !== id)
@@ -71,7 +92,7 @@ export function createLayoutController(ctx: TuiContext) {
       })
     },
     place(id: CardID, pin: false | "bottom", before?: CardID) {
-      if (!isCardID(id) || id === "setup" || before === id) return Promise.resolve()
+      if (!isCardID(id) || id === "account" || before === id) return Promise.resolve()
       if (before && (!options().cards.includes(before) || options().hidden.has(before) || options().pins[before] !== pin)) return Promise.resolve()
       return edit((draft) => {
         draft.cards = draft.cards.filter((card) => card !== id)
@@ -83,10 +104,15 @@ export function createLayoutController(ctx: TuiContext) {
       })
     },
     hide(id: CardID) {
-      if (id === "setup") return Promise.resolve()
+      if (id === "account") return Promise.resolve()
       return edit((draft) => { if (!draft.hidden.includes(id)) draft.hidden.push(id) })
     },
-    reset() { return save((draft) => { delete draft.cards; delete draft.pins; delete draft.hidden; delete draft.activeBottom }) },
+    reset() {
+      return Promise.all([
+        updateArrangement((draft) => { delete draft.cards; delete draft.pins; delete draft.hidden }).catch(report),
+        updateLocal((draft) => { delete draft.activeBottom }).catch(report),
+      ]).then(() => {})
+    },
   }
 }
 

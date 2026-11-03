@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.5.0
+
+novaSpace is now about custom cards. This release removes profile sync and the
+setup inventory.
+
+- **Cards folder.** Custom cards now live in
+  `~/.config/opencode/novaspace/cards/`. Every folder with an `index.js` is a
+  card named `custom:<folder>`. New cards load without a restart, and removed
+  ones unload. The `customCards` option is gone: copy your card files into the
+  folder instead.
+- **Card sync.** Sign in with the GitHub CLI and connect a private repository
+  to sync your cards and their layout across machines. Cards are stored in
+  `.novaspace/cards.json`. Layout settings merge one by one, while card files
+  that changed on both machines pause sync until you choose a version. Files
+  with credentials, linked files and large files stay local, together with the
+  rest of their card.
+- **Synced layout.** Card order, pins and hidden cards move from OpenCode's
+  plugin storage to `novaspace/layout.json`, so they sync too. Your current
+  arrangement is copied over on first start. The selected bottom page stays
+  per machine.
+- **Removed profile sync.** novaSpace no longer reads or syncs OpenCode
+  settings, appearance, skills, instructions, agents, commands or plugin files.
+  Your existing repository and `.novaspace/profile.json` are left as they are,
+  and so is the old local state in `~/.local/state/novaspace/sync.json`.
+- **Removed the setup inventory.** The Profile & setup card and its settings
+  dialog are replaced by the **novaSpace** card: your GitHub account, card count
+  and sync status, with one dialog for the cards folder, sync and updates. Its
+  ID is `account`; the old `setup` ID still works in `cli.json` and saved
+  layouts.
+- **Redesign.** Following OpenCode's own surface language, cards are an
+  elevated surface with a single left edge that lights up on hover, instead of
+  a full box. Titles line up with the card content. Sync status always shows a
+  glyph and a word (`● Synced`, `▲ Conflict`), never colour alone.
+- **Session card.** "Session info" is now "Session". It adds a context meter
+  that turns amber at 80% and red at 90%, and shows the branch in its own
+  column.
+- **New card chrome.** Custom cards get `chrome.Meter` for usage and progress
+  bars, and an `accent` prop on `chrome.Card` to colour its edge. Existing
+  `apiVersion: 1` cards keep working unchanged.
+- Drop the `jsonc-parser` dependency.
+
 ## 0.4.5
 
 - Fix the sidebar crash on OpenCode 2.1.2 (`host.content.getLayoutNode is not a

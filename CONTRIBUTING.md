@@ -20,28 +20,59 @@ bun run build
 
 novaSpace ships two built-in cards, active by default on a fresh install:
 
-- **Profile & setup** (`setup`) — pinned local/GitHub profile and setup inventory
-  with a compact customization hub.
-- **Session info** (`session-info`) — pinned context tokens, context usage, cost,
-  and workspace/branch, using the native OpenCode sidebar data.
+- **novaSpace** (`account`) — pinned to the top: the GitHub account, the card
+  count and sync status. It opens the novaSpace dialog (cards folder, sync,
+  updates). Older layouts call it `setup`; `config.ts` maps that alias.
+- **Session** (`session-info`) — pinned to the bottom: context tokens with a
+  usage meter, cost, and folder/branch, using the native OpenCode sidebar data.
 
-Every other card is a local custom card that the user declares in the
-`customCards` option (see the README). `src/custom-cards.tsx` imports each module
-in the background, validates its `apiVersion: 1` default export, and registers it
-in `src/cards/registry.tsx` under its `custom:` ID. The registry is a signal, so
-the layout picks the card up once it has loaded. A missing or invalid module is
-skipped with a toast. Custom cards receive the normal `CardProps` plus `chrome`
-(`Card`, `CardTitle`, `CardAction`, `cardHeader`, `metricRow`) so they can match
-the built-in cards without importing novaSpace internals.
+Every other card is a custom card in the novaSpace cards folder
+(`~/.config/opencode/novaspace/cards/<name>/index.js`, see `src/paths.ts`).
+`createCardLibrary` in `src/custom-cards.tsx` scans that folder every few
+seconds and after each sync, imports new cards, validates their `apiVersion: 1`
+default export, and registers them in `src/cards/registry.tsx` under
+`custom:<name>`. Removed folders unregister. A changed card is not re-imported:
+its helpers would stay cached, so it reports that a restart is needed instead.
+A missing or invalid module is skipped with one toast. Custom cards receive the
+normal `CardProps` plus `chrome` (`Card`, `CardTitle`, `CardAction`, `Meter`,
+`cardHeader`, `metricRow`) so they match the built-in cards without importing
+novaSpace internals.
 
 Do not add personal cards to this repository. Tests that need extra cards
-register stand-ins from `tests/custom-cards.fixture.tsx`.
+register stand-ins with `stubCards()` from `tests/custom-cards.fixture.tsx`
+and remove them afterwards, because loaded custom cards join the layout.
 
-Layout ordering, placement, hidden cards and the selected page are saved through
-OpenCode's plugin storage (`sidebar-layout-v1`) and survive reloads/restarts.
-Plugin options supply the initial layout; the reset control restores them. Long
-bottom cards scroll within a height cap so the middle area remains usable. Card
-titles and body text remain selectable; only the `⠿` grip starts a drag.
+## Layout
+
+The arrangement (order, pins, hidden cards) is saved in
+`~/.config/opencode/novaspace/layout.json` by `src/layout-file.tsx`, so card
+sync can carry it. The file is polled for changes from other windows and
+reloaded right after a sync changes it. The selected bottom page stays in
+OpenCode's plugin storage (`sidebar-layout-v1`) because it is per machine. On
+first start the file is seeded from the arrangement saved there by 0.4.x.
+Plugin options supply the initial layout; loaded custom cards that the layout
+doesn't list join the end. Long bottom cards scroll within a height cap so the
+middle area stays usable. Card titles and body text stay selectable; only the
+`⠿` grip starts a drag.
+
+## Card sync
+
+`src/sync/` syncs the novaSpace folder through a private GitHub repository; see
+[docs/sync.md](docs/sync.md) for the user-facing behaviour.
+
+- `files.ts` — reads the folder into a snapshot (`cards/...` and `layout.json`
+  keys, base64 content), decides what stays local, and applies a new snapshot
+  with backups, staging and rollback.
+- `merge.ts` — three-way merge: whole files for cards, field by field for
+  `layout.json`.
+- `remote.ts` — `gh` calls for `.novaspace/cards.json`.
+- `engine.ts` — `CardSync`: state file, cross-process SQLite lease, the
+  one-minute schedule, and `subscribe()` for in-process listeners.
+- `account.ts` — the signed-in GitHub login and the `hosts.yml` change stamp.
+
+`scripts/sync-e2e.ts` runs the engine against a real temporary private
+repository. It creates and deletes that repository, so run it only with
+approval: `bun run scripts/sync-e2e.ts --allow-create-delete`.
 
 ## Development and installation model
 
@@ -84,7 +115,7 @@ option, keyed by the same package path. OpenCode delivers options declared in
 `opencode.json(c)` to a plugin's server half only; the TUI half receives an empty
 object.
 
-Keep the stable package entry unpinned to use the hub's update check. An explicit
+Keep the stable package entry unpinned to use the dialog's update check. An explicit
 `@version` stays on that version and cannot offer later releases. Active feature
 work should use the development host.
 
@@ -103,7 +134,7 @@ one of two ways:
   load with `Cannot find package '@opentui/solid'`;
 - with peers materialized beside the plugin, they resolve to a **second** Solid
   runtime, so the sidebar paints one frame and no reactive update ever lands —
-  inventory counts stay `0`, the profile stays `Local profile`, and session
+  the account stays `novaSpace`, the card count stays at zero, and session
   context stays `—`.
 
 `bun run build` (`scripts/build.ts`) compiles `src/**` ahead of time using the
@@ -139,29 +170,22 @@ Before publishing `opencode-novaspace`:
 
 npm versions are immutable, so verify a risky install-path change with a
 `X.Y.Z-rc.N` prerelease on the `next` dist-tag first. Confirm the managed cache
-does not materialize `solid-js` or `@opentui/*`, and that inventory counts, the
-GitHub profile, and session context update after mount — a populated count is the
-proof that a reactive update landed after the first frame.
+does not materialize `solid-js` or `@opentui/*`, and that the card count, the
+GitHub account, and session context update after mount — a populated value is
+the proof that a reactive update landed after the first frame.
 
-The npm page renders `README.md` from the published tarball. Images use absolute
-`raw.githubusercontent.com` URLs to `docs/images/` on `main`, so they appear on npm
-without shipping the images in the package.
+The npm page renders `README.md` from the published tarball. Links use absolute
+GitHub URLs so they work on npm. If you add images, put them in `docs/images/`
+and link them with absolute `raw.githubusercontent.com` URLs on `main`, so they
+appear on npm without shipping the images in the package.
 
 ## Screenshots
 
-README screenshots live in `docs/images/` and come from a real OpenCode TUI run
-against an isolated demo profile, never a personal one:
-
-- a temporary `HOME` containing only a demo `opencode.json`, `cli.json`, one
-  skill, one agent, one command and an `AGENTS.md`;
-- a small demo project, with a free OpenCode Zen model doing real work;
-- a local stand-in for `gh` reporting a demo account (`octo-dev`) and storing the
-  profile in a local file, so sync screens show without contacting GitHub;
-- [`ttyd`](https://github.com/tsl0922/ttyd) with the DOM renderer, captured by
-  headless Chrome at 1440×860 and a device scale factor of 2.
-
-Keep account names and paths out of new screenshots. Screenshots that need more
-than the built-in cards use demo custom cards.
+The README shows text previews instead of screenshots, so they never drift from
+the real design and render the same on GitHub and npm. Update them when the card
+chrome changes. If you add screenshots, take them from a real OpenCode TUI run
+against an isolated demo profile (a temporary `HOME`, a demo `gh` account such
+as `octo-dev`, and demo custom cards), never a personal one.
 
 ## Project structure
 
@@ -182,20 +206,26 @@ Entry points
 
 Framework (`src/`)
 
-- `types.ts` — the host `TuiContext` / `ServerContext` contract and shared data
-  types (`Session`, `Theme`).
-- `config.ts` — built-in and `custom:` card IDs, default order and pins, and
-  option parsing (including `customCards`).
+- `types.ts` — the host `TuiContext` contract and shared data types (`Session`,
+  `Theme`).
+- `config.ts` — built-in and `custom:` card IDs, default order and pins, the
+  `setup` alias, and option parsing.
+- `paths.ts` — the novaSpace folder, cards folder, layout file and state folder.
 - `card.ts` — the card contract: `CardProps`, `CardDefinition`, and `defineCard`.
-- `ui.tsx` — shared card primitives: `Card`, `CardTitle` (the drag grip),
-  `CardAction`, `Divider`, and surface/scrollbar helpers.
-- `layout.tsx` — persistent layout controller (order, pins, hidden, active page).
+- `ui.tsx` — shared card chrome: `Card`, `CardTitle` (with the drag grip),
+  `CardAction`, `Meter`, `Divider`, and colour helpers.
+- `dialog.tsx` — dialog primitives: keyboard-navigable `ActionLink`s inside
+  `DialogActions`, and opening paths.
+- `layout.tsx` — layout controller (order, pins, hidden, active page).
+- `layout-file.tsx` — the synced `layout.json` store.
+- `custom-cards.tsx` — the card library: discovery, loading, and `chrome`.
 - `drag.tsx` — drag-and-drop state machine, drop-target geometry, and auto-scroll.
 - `drag-overlay.tsx` — full-screen drag overlay: previews, drop hints, and Esc.
 - `card-preview.tsx` — snapshots a mounted card into the floating drag copy.
 - `carousel.tsx` — bottom page carousel and the page markers.
 - `host.ts` — adapts the native OpenCode sidebar host layout (see below).
-- `custom-cards.tsx` — loads local custom card modules and hands them `chrome`.
+- `update.ts` — plugin version and update state from the host.
+- `sync/` — card sync (see "Card sync").
 - `layout.ts` / `drag.ts` — stable re-export entrypoints (see the runtime note
   below).
 
@@ -203,11 +233,21 @@ Cards (`src/cards/`)
 
 - `registry.tsx` — built-in cards plus registered custom cards, the `cards`
   lookup, and `partitionCards` (top/scroll/bottom).
-- `<id>/index.tsx` — one subfolder per built-in card, each default-exporting one
-  `defineCard(...)`. Cards that need helpers keep them in the same folder:
-  `setup/` (inventory, modal, profile, sync).
+- `account/` — the novaSpace card (`index.tsx`), its dialog (`dialog.tsx`), and
+  the status wording shared by both (`status.ts`).
+- `session-info/` — the Session card.
 
-### Add a card
+### Design
+
+Cards follow OpenCode's own surface language: an elevated fill with a single
+left edge (`▎`), not a full box. Hierarchy comes from placement, spacing and
+weight before colour. Status always pairs a glyph with a word. The edge is
+drawn as a column of text cells because text respects scroll clipping in the
+host, while native box borders do not. Dialog actions use `ActionLink`
+variants: `primary` for the main action, `link` for others, and `quiet` for
+dismissive ones.
+
+### Add a built-in card
 
 Most cards belong outside novaSpace as custom cards (see the README). To add a
 built-in card:
@@ -217,23 +257,11 @@ built-in card:
    file with `/** @jsxImportSource @opentui/solid */`, like every other card.
 2. Add the id to `cardIDs` (and a `defaultPins` entry) in `src/config.ts`.
 3. Import it and add it to the card list in `src/cards/registry.tsx`.
-4. List the id in your `cli.json` `cards` option, then restart the TUI completely
-   — a reload does not remount an already-mounted sidebar.
-
-`CardID` and the layout stay type-safe because they derive from `cardIDs`.
+4. Restart the TUI completely — a reload does not remount an already-mounted
+   sidebar.
 
 Keep reactive helpers on the `.tsx` path even when they contain no JSX; see the
-runtime note under "Host integration". New files need no build step while you
-develop against a local checkout, and are picked up automatically by
-`bun run build` when publishing.
-
-### Publish
-
-This repository only contains the built-in cards (`setup`, `session-info`), so
-every build is framework-only. Because plugins are referenced from
-`opencode.json(c)` by path or package, this repo is the checkout you own and
-edit; installed npm packages live in OpenCode's managed location and are not
-hand-edited.
+runtime note under "Host integration".
 
 ## Host integration
 
@@ -262,9 +290,9 @@ JSX text comes from `textNode.gatherWithInheritedStyle`; `.chunks` only describe
 manually assigned content. The preview uses `style.content` to preserve StyledText
 because the renderer's direct JSX `content` prop stringifies objects.
 
-Scrollbars use a one-cell track with native semantic theme colors. The setup modal
-sizes itself from terminal dimensions and applies dialog settings after `show()`,
-which resets the host's dialog size and centering.
+Scrollbars use a one-cell track with native semantic theme colors. The novaSpace
+dialog sizes itself from terminal dimensions and applies dialog settings after
+`show()`, which resets the host's dialog size and centering.
 
 ## License
 

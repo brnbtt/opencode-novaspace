@@ -100,7 +100,7 @@ export function createSidebarDrag(layout: LayoutController, ctx: TuiContext) {
       const node = cards.get(key(sessionID, id))
       // Only the non-selectable grip calls start; card titles and body text keep
       // their normal terminal selection behavior.
-      if (disposed || id === "setup" || !node || event.button !== MouseButton.LEFT || event.modifiers.ctrl || event.modifiers.shift || event.modifiers.alt) return
+      if (disposed || id === "account" || !node || event.button !== MouseButton.LEFT || event.modifiers.ctrl || event.modifiers.shift || event.modifiers.alt) return
       clear()
       ctx.renderer?.clearSelection()
       event.preventDefault()

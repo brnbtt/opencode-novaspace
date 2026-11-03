@@ -10,11 +10,17 @@ test("ships a TUI-only package without bundled OptMem tools", async () => {
   expect(await Bun.file(new URL("../src/cards/memory/tools.ts", import.meta.url)).exists()).toBe(false)
 })
 
-test("ships only the built-in cards", async () => {
+test("ships only the built-in cards and no profile sync", async () => {
   const root = new URL("../src/cards", import.meta.url).pathname
   const folders = new Set<string>()
   for await (const file of new Bun.Glob("*/index.tsx").scan({ cwd: root })) folders.add(file.split("/")[0]!)
-  expect([...folders].sort()).toEqual(["session-info", "setup"])
+  expect([...folders].sort()).toEqual(["account", "session-info"])
+  const manifest = await Bun.file(new URL("../package.json", import.meta.url)).json()
+  expect(manifest.dependencies ?? {}).toEqual({})
+  const source = new URL("../src", import.meta.url).pathname
+  for await (const file of new Bun.Glob("**/*.{ts,tsx}").scan({ cwd: source })) {
+    expect(await Bun.file(`${source}/${file}`).text()).not.toMatch(/AGENTS\.md|opencode\.jsonc?|skills\//)
+  }
 })
 
 test("pins the OpenTUI JSX runtime in every shipped TSX module", async () => {
@@ -40,7 +46,7 @@ test("uses OpenCode V2 resolved theme tokens", async () => {
 
 test("uses the host renderer for installed-package dimensions", async () => {
   const root = new URL("../src", import.meta.url).pathname
-  const consumers = ["carousel.tsx", "drag-overlay.tsx", "cards/setup/modal.tsx", "cards/setup/sync-onboarding.tsx"]
+  const consumers = ["carousel.tsx", "drag-overlay.tsx", "cards/account/dialog.tsx"]
   for (const file of consumers) {
     const source = await Bun.file(`${root}/${file}`).text()
     expect(source).toContain("useHostDimensions")

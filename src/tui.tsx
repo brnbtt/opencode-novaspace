@@ -7,16 +7,18 @@ import { Divider, nativeScrollbar } from "./ui"
 import { fitSidebarHost } from "./host"
 import type { BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
 import { createLayoutController, type LayoutController } from "./layout"
+import { createLayoutFile } from "./layout-file"
 import { CardCarousel } from "./carousel"
 import { createSidebarDrag, type SidebarDrag } from "./drag"
 import { DragOverlay } from "./drag-overlay"
-import { profileSync } from "./cards/setup/sync"
-import { loadCustomCards } from "./custom-cards"
+import { cardSync } from "./sync/engine"
+import { createCardLibrary } from "./custom-cards"
+import { novaPaths } from "./paths"
 
 export function RenderCard(props: { id: CardID; ctx: TuiContext; sessionID: string; controller: LayoutController; drag?: SidebarDrag }) {
   // Keep this object stable when unrelated reactive props (e.g. dragging) change.
   // Replacing it re-registers the card and cancels the gesture during cleanup.
-  const binding = props.drag && props.id !== "setup" ? {
+  const binding = props.drag && props.id !== "account" ? {
     manager: props.drag,
     get sessionID() { return props.sessionID },
     id: props.id,
@@ -90,9 +92,18 @@ export function SidebarFooter(props: FooterProps) {
 export default {
   id: "novaspace.tui",
   setup(ctx: TuiContext) {
-    const stopCustomCards = loadCustomCards(ctx)
-    const stopSync = profileSync.start()
-    const controller = createLayoutController(ctx)
+    const paths = novaPaths()
+    const library = createCardLibrary(ctx, paths.cards)
+    let layoutFile: ReturnType<typeof createLayoutFile> | undefined
+    const controller = createLayoutController(ctx, (seed) => (layoutFile = createLayoutFile(paths.layout, seed)).store)
+    const engine = cardSync()
+    const stopSync = engine.start()
+    // A sync that changed local files may have added cards or a new layout.
+    const unsubscribe = engine.subscribe((_, changed) => {
+      if (!changed.length) return
+      void library.refresh()
+      layoutFile?.reload(true)
+    })
     const drag = createSidebarDrag(controller, ctx)
     const unregisterOverlay = ctx.ui.slot({ append: "app", render: () => <DragOverlay ctx={ctx} drag={drag} /> })
     const unregisterContent = ctx.ui.slot({
@@ -104,12 +115,14 @@ export default {
       render: ({ sessionID }) => <SidebarFooter ctx={ctx} sessionID={sessionID} controller={controller} drag={drag} />,
     })
     return () => {
-      stopSync()
+      unsubscribe()
+      void stopSync()
       drag.dispose()
       unregisterOverlay()
       unregisterContent()
       unregisterFooter()
-      stopCustomCards()
+      layoutFile?.dispose()
+      library.dispose()
     }
   },
 }

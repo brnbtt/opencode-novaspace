@@ -1,4 +1,4 @@
-import type { TuiContext } from "../../types"
+import type { TuiContext } from "./types"
 
 /**
  * The server plugin id novaSpace registers. A package install reports one
