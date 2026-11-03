@@ -67,19 +67,26 @@ starts, so reloading isn't enough. You need OpenCode 2.0.12 or later.
 
 On a machine that can't reach the npm registry, install from a local folder:
 
-1. On a machine that can, run `npm pack opencode-novaspace` (or download the
-   `.tgz` from the [GitHub release](https://github.com/brnbtt/opencode-novaspace/releases)).
-2. Extract it on the target machine, for example to
-   `~/.local/share/opencode-novaspace` (the archive contains a `package/`
-   folder; use that folder).
-3. Point the novaSpace entry in `~/.config/opencode/cli.json` at that folder:
+1. Download `opencode-novaspace-<version>.tgz` from the
+   [GitHub releases](https://github.com/brnbtt/opencode-novaspace/releases),
+   or run `npm pack opencode-novaspace` on a machine that can reach npm.
+2. Extract it. The archive contains a `package/` folder; move that folder to
+   `~/.local/share/opencode-novaspace`.
+3. Create a small loader in OpenCode's plugins folder,
+   `~/.config/opencode/plugins/novaspace/`, with two files:
 
-   ```json title="~/.config/opencode/cli.json"
-   { "plugins": [{ "package": "/Users/you/.local/share/opencode-novaspace" }] }
+   ```json title="~/.config/opencode/plugins/novaspace/package.json"
+   { "name": "novaspace-local", "private": true, "type": "module", "exports": { "./tui": "./tui.js" } }
    ```
 
-To update, replace the folder's contents with a newer release and restart
-OpenCode.
+   ```js title="~/.config/opencode/plugins/novaspace/tui.js"
+   export { default } from "../../../../.local/share/opencode-novaspace/dist/tui.js"
+   ```
+
+OpenCode loads plugins from that folder automatically, on every platform and
+version. Remove any `opencode-novaspace` entry from `cli.json` so novaSpace
+isn't loaded twice. To update, replace the contents of
+`~/.local/share/opencode-novaspace` with a newer release and restart OpenCode.
 
 ## The sidebar
 
